@@ -4,6 +4,14 @@ import numpy as np
 
 
 class EigenV():
+    """
+    Args:
+        occupation: the occupation of the state
+        gvecs: array of G-vectors
+        evec: array of plane wave coefficients
+              of the form [[c1_real, c1_imaginary],[c2_real, c2_imaginary],...]
+              evec[i] corresponds to gvecs[i]
+    """
     def __init__(self, occupation, gvecs, evec):
         self._occupation = occupation
         self._gvecs = gvecs
@@ -21,13 +29,29 @@ class EigenV():
     def evec(self):
         return self._evec
 
+    def get_evec_complex(self):
+        "get evec as a 1d complex vector"
+        return self.evec[:, 0] + self.evec[:, 1]*1j
+
 
 class Kpoint(MutableSequence):
-    def __init__(self, kcoords, weight, planewaves, eigenvs=[]):
+    """
+    Acts as a list of EigenVs while also storing coordinates,
+        weight, and the number of plane waves
+    Args:
+        kcoords: the (reduced) coordinates in reciprocal space
+        weight: the weight of this kpoint
+        planewaves: number of planewaves at this kpoint
+        eigenvs: list of EigenV objects at this kpoint
+    """
+    def __init__(self, kcoords, weight, planewaves, eigenvs=None):
         self._kcoords = kcoords
         self._weight = weight
         self._planewaves = planewaves
-        self._eigenvs = eigenvs
+        if eigenvs:
+            self._eigenvs = eigenvs
+        else:
+            self._eigenvs = []
 
     @property
     def eigenvs(self):
@@ -60,26 +84,44 @@ class Kpoint(MutableSequence):
         else:
             raise TypeError("Elements of Kpoint must be EigenV objects")
 
-    def __setitem__(self, i, mode):
-        if isinstance(mode, EigenV):
-            self._eigenvs[i] = mode
+    def __setitem__(self, i, eigenv):
+        if isinstance(eigenv, EigenV):
+            self._eigenvs[i] = eigenv
         else:
             raise TypeError("Elements of Kpoint must be EigenV objects")
 
+    def get_occupied_only(self):
+        """returns a Kpoint object which only contains EigenV objects with
+               occupation > 0.9"""
+        return Kpoint(self.kcoords, self.weight, self.planewaves,
+                      [s for s in self.eigenvs if s.occupation > 0.9])
 
-def read_wfc(wfc_file):
+
+def read_wfc(wfc_file, return_first_k=False):
+    """
+    Args:
+        wfc_file: file to read in (from output of modified cut3d)
+        return_first_k : for testing only, only returns a single Kpoint
+    returns:
+        list of Kpoints
+    """
     kpoints = []
-    with open(wfc_file) as f:
+    with open(wfc_file, 'r', 1) as f:
         for line in f:
             line_data = line.split()
             if len(line_data) != 7:
                 raise ValueError('expected a eigenv header line')
             else:
-                planewaves, weight, kx, ky, kz, en, occ = [float(x) for x in line_data]
+                (planewaves, weight,
+                 kx, ky, kz,
+                 en, occ) = [float(x) for x in line_data]
                 planewaves = int(planewaves)
                 try:
                     if this_kpoint.kcoords != (kx, ky, kz):
-                        print("read kpoint {}".format(this_kpoint.kcoords))
+                        print("finished reading kpoint "
+                              "{}".format(this_kpoint.kcoords))
+                        if return_first_k:
+                            return this_kpoint
                         kpoints.append(this_kpoint)
                         this_kpoint = Kpoint((kx, ky, kz), weight, planewaves)
                 except NameError:
@@ -87,16 +129,39 @@ def read_wfc(wfc_file):
                 gvecs = np.zeros((planewaves, 3), dtype=float)
                 evec = np.zeros((planewaves, 2), dtype=float)
                 for i in range(planewaves):
-                    gvecs[i, 0], gvecs[i, 1], gvecs[i, 2], evec[i, 0], evec[i, 1] = f.readline().split()
+                    (gvecs[i, 0], gvecs[i, 1], gvecs[i, 2],
+                     evec[i, 0], evec[i, 1]) = f.readline().split()
                 this_kpoint.append(EigenV(occ, gvecs, evec))
+    print("finished reading kpoint {}".format(this_kpoint.kcoords))
+    kpoints.append(this_kpoint)
     return kpoints
+
+
+def compute_overlap(evs0, evs1):
+    """
+    Args: evs0, evs1: each a list of EigenV objects
+    Returns: overlap matrix overlap[m,n] = <evs0_m | evs1_n>
+    """
+    overlap = np.zeros((len(evs0), len(evs0)), dtype=complex)
+    for m, ev0 in enumerate(evs0):
+        for n, ev1 in enumerate(evs1):
+            overlap[m, n] = np.vdot(ev0.get_evec_complex(),
+                                    ev1.get_evec_complex())
+    return overlap
 
 
 if __name__ == '__main__':
     import sys
-    wfc_file = sys.argv[1]
-    wfc = read_wfc(wfc_file)
-    print(wfc[0].kcoords)
-    print(wfc[0][21].occupation)
-    print(wfc[0][0].gvecs[0])
-    print(wfc[0][0].evec)
+
+    print("reading {}".format(sys.argv[1]))
+    wfc0 = read_wfc(sys.argv[1], return_first_k=True).get_occupied_only()
+    print("reading {}".format(sys.argv[2]))
+    wfc1 = read_wfc(sys.argv[2], return_first_k=True).get_occupied_only()
+
+    overlap = compute_overlap(wfc0, wfc1)
+    np.savetxt('overlap_test.dat', overlap)
+
+    u, s, v = np.linalg.svd(overlap)
+    np.savetxt('u.dat', u)
+    np.savetxt('s.dat', s)
+    np.savetxt('v.dat', v)
