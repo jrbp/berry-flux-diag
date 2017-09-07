@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from collections import MutableSequence
 import numpy as np
+from itertools import count
 
 
 class EigenV():
@@ -150,18 +151,30 @@ def compute_overlap(evs0, evs1):
     return overlap
 
 
+def find_min_singular_value(wfc0, wfc1):
+    """
+    Args: wfc0, wfc1: each a list of Kpoint objects
+    Returns: The value of the smallest of all singular values
+    across all kpoints from the singular value decomposition
+    preformed at each kpoint, if this is too small the states
+    were unable to be reasonably aligned
+    """
+    s_mins = np.zeros(len(wfc0))
+    for i, kpt0, kpt1 in zip(count(), wfc0, wfc1):
+        overlap = compute_overlap(kpt0.get_occupied_only(),
+                                  kpt1.get_occupied_only())
+        u, s, v = np.linalg.svd(overlap)
+        s_mins[i] = s.min()
+    return s_mins.min()
+
+
 if __name__ == '__main__':
     import sys
 
     print("reading {}".format(sys.argv[1]))
-    wfc0 = read_wfc(sys.argv[1], return_first_k=True).get_occupied_only()
+    wfc0 = read_wfc(sys.argv[1])
     print("reading {}".format(sys.argv[2]))
-    wfc1 = read_wfc(sys.argv[2], return_first_k=True).get_occupied_only()
+    wfc1 = read_wfc(sys.argv[2])
 
-    overlap = compute_overlap(wfc0, wfc1)
-    np.savetxt('overlap_test.dat', overlap)
-
-    u, s, v = np.linalg.svd(overlap)
-    np.savetxt('u.dat', u)
-    np.savetxt('s.dat', s)
-    np.savetxt('v.dat', v)
+    print("smallest singular value is "
+          "{}".format(find_min_singular_value(wfc0, wfc1)))
