@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 from collections import MutableSequence
-import numpy as np
 from itertools import count
+from cmath import log
+import numpy as np
 
 
 class EigenV():
@@ -113,10 +114,17 @@ def read_wfc(wfc_file, return_first_k=False):
             if len(line_data) != 7:
                 raise ValueError('expected a eigenv header line')
             else:
-                (planewaves, weight,
-                 kx, ky, kz,
-                 en, occ) = [float(x) for x in line_data]
-                planewaves = int(planewaves)
+                # (planewaves, weight,
+                #  kx, ky, kz,
+                #  en, occ) = [float(x) for x in line_data]
+                # planewaves = int(planewaves)
+                # above had problem casting some en (which are never used)
+                planewaves = int(line_data[0])
+                weight = float(line_data[1])
+                kx = float(line_data[2])
+                ky = float(line_data[3])
+                kz = float(line_data[4])
+                occ = float(line_data[6])
                 try:
                     if this_kpoint.kcoords != (kx, ky, kz):
                         print("finished reading kpoint "
@@ -163,9 +171,24 @@ def find_min_singular_value(wfc0, wfc1):
     for i, kpt0, kpt1 in zip(count(), wfc0, wfc1):
         overlap = compute_overlap(kpt0.get_occupied_only(),
                                   kpt1.get_occupied_only())
-        u, s, v = np.linalg.svd(overlap)
+        s = np.linalg.svd(overlap, compute_uv=False)
+        # print(kpt0.kcoords, " ", kpt1.kcoords, " ", s.min())
         s_mins[i] = s.min()
     return s_mins.min()
+
+
+def compute_phase_diff_along_string(wfc0, wfc1, kx, ky):
+    tot_phase_change = 0.
+    for kpt0, kpt1 in zip(wfc0, wfc1):
+        if kpt0.kcoords[0] == kx and kpt0.kcoords[1] == ky:
+            overlap = compute_overlap(kpt0.get_occupied_only(),
+                                      kpt1.get_occupied_only())
+            u, s, v = np.linalg.svd(overlap)
+            unit_overlap = np.dot(u, v)
+            phase_change = (-1 * log(np.linalg.det(unit_overlap)).imag)
+            print(kpt0.kcoords, " ", phase_change)
+            tot_phase_change += phase_change
+    return tot_phase_change
 
 
 if __name__ == '__main__':
@@ -178,3 +201,13 @@ if __name__ == '__main__':
 
     print("smallest singular value is "
           "{}".format(find_min_singular_value(wfc0, wfc1)))
+
+    bz_2d_points = []
+    for kpt in wfc0:
+        bz_2d_points.append((kpt.kcoords[0], kpt.kcoords[1]))
+    for string in set(bz_2d_points):
+        print(string)
+        print(compute_phase_diff_along_string(wfc0, wfc1,
+                                              string[0],
+                                              string[1]))
+        print()
