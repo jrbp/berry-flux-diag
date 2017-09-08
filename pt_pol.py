@@ -114,17 +114,9 @@ def read_wfc(wfc_file, return_first_k=False):
             if len(line_data) != 7:
                 raise ValueError('expected a eigenv header line')
             else:
-                # (planewaves, weight,
-                #  kx, ky, kz,
-                #  en, occ) = [float(x) for x in line_data]
-                # planewaves = int(planewaves)
-                # above had problem casting some en (which are never used)
-                planewaves = int(line_data[0])
-                weight = float(line_data[2])
-                kx = float(line_data[3])
-                ky = float(line_data[4])
-                kz = float(line_data[5])
-                occ = float(line_data[6])
+                (planewaves, pws_in_calc, weight,
+                 kx, ky, kz, occ) = [float(x) for x in line_data]
+                planewaves = int(planewaves)
                 try:
                     if this_kpoint.kcoords != (kx, ky, kz):
                         print("finished reading kpoint "
