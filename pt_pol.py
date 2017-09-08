@@ -154,7 +154,7 @@ def compute_overlap(evs0, evs1):
 def find_min_singular_value(wfc0, wfc1):
     """
     Args: wfc0, wfc1: each a list of Kpoint objects
-    Returns: The value of the smallest of all singular values
+    Returns: The (value, coordinate) of the smallest of all singular values
     across all kpoints from the singular value decomposition
     preformed at each kpoint, if this is too small the states
     were unable to be reasonably aligned
@@ -164,9 +164,8 @@ def find_min_singular_value(wfc0, wfc1):
         overlap = compute_overlap(kpt0.get_occupied_only(),
                                   kpt1.get_occupied_only())
         s = np.linalg.svd(overlap, compute_uv=False)
-        # print(kpt0.kcoords, " ", kpt1.kcoords, " ", s.min())
         s_mins[i] = s.min()
-    return s_mins.min()
+    return s_mins.min(), wfc0[s_mins.argmin()].kcoords
 
 
 def compute_phase_diff_along_string(wfc0, wfc1, kx, ky):
@@ -195,7 +194,7 @@ if __name__ == '__main__':
     wfc1 = read_wfc(sys.argv[2])
 
     print("smallest singular value is "
-          "{}".format(find_min_singular_value(wfc0, wfc1)))
+          "{} at the point {}".format(*find_min_singular_value(wfc0, wfc1)))
 
     bz_2d_points = []
     for kpt in wfc0:
@@ -205,9 +204,7 @@ if __name__ == '__main__':
     num_strings = len(set(bz_2d_points))
     for kx, ky in set(bz_2d_points):
         print(kx, ", ", ky)
-        val = compute_phase_diff_along_string(wfc0, wfc1,
-                                              kx,
-                                              ky)
+        val = compute_phase_diff_along_string(wfc0, wfc1, kx, ky)
         string_vals.append(val)
         print(val)
         print()
