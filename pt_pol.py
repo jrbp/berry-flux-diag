@@ -120,10 +120,10 @@ def read_wfc(wfc_file, return_first_k=False):
                 # planewaves = int(planewaves)
                 # above had problem casting some en (which are never used)
                 planewaves = int(line_data[0])
-                weight = float(line_data[1])
-                kx = float(line_data[2])
-                ky = float(line_data[3])
-                kz = float(line_data[4])
+                weight = float(line_data[2])
+                kx = float(line_data[3])
+                ky = float(line_data[4])
+                kz = float(line_data[5])
                 occ = float(line_data[6])
                 try:
                     if this_kpoint.kcoords != (kx, ky, kz):
