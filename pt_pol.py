@@ -180,7 +180,7 @@ def find_min_singular_value(wfc0, wfc1):
 def compute_phase_diff_along_string(wfc0, wfc1, kx, ky):
     tot_phase_change = 0.
     for kpt0, kpt1 in zip(wfc0, wfc1):
-        if kpt0.kcoords[0] == kx and kpt0.kcoords[1] == ky:
+        if kpt0.kcoords[0] == kx and kpt0.kcoords[1] == ky and kpt0.kcoords[2] > 0.:
             overlap = compute_overlap(kpt0.get_occupied_only(),
                                       kpt1.get_occupied_only())
             u, s, v = np.linalg.svd(overlap)
@@ -205,9 +205,15 @@ if __name__ == '__main__':
     bz_2d_points = []
     for kpt in wfc0:
         bz_2d_points.append((kpt.kcoords[0], kpt.kcoords[1]))
+
+    string_vals = []
+    num_strings = len(set(bz_2d_points))
     for string in set(bz_2d_points):
         print(string)
-        print(compute_phase_diff_along_string(wfc0, wfc1,
+        val = compute_phase_diff_along_string(wfc0, wfc1,
                                               string[0],
-                                              string[1]))
+                                              string[1])
+        string_vals.append(val)
+        print(val)
         print()
+    print(sum(string_vals)/num_strings)
