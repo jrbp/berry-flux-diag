@@ -110,29 +110,25 @@ def read_wfc(wfc_file, return_first_k=False):
     kpoints = []
     with open(wfc_file, 'r', 1) as f:
         for line in f:
-            line_data = line.split()
-            if len(line_data) != 7:
-                raise ValueError('expected a eigenv header line')
-            else:
-                (planewaves, pws_in_calc, weight,
-                 kx, ky, kz, occ) = [float(x) for x in line_data]
-                planewaves = int(planewaves)
-                try:
-                    if this_kpoint.kcoords != (kx, ky, kz):
-                        print("finished reading kpoint "
-                              "{}".format(this_kpoint.kcoords))
-                        if return_first_k:
-                            return this_kpoint
-                        kpoints.append(this_kpoint)
-                        this_kpoint = Kpoint((kx, ky, kz), weight, planewaves)
-                except NameError:
+            (planewaves, pws_in_calc, weight,
+                kx, ky, kz, occ) = [float(x) for x in line.split()]
+            planewaves = int(planewaves)
+            try:
+                if this_kpoint.kcoords != (kx, ky, kz):
+                    print("finished reading kpoint "
+                          "{}".format(this_kpoint.kcoords))
+                    if return_first_k:
+                        return this_kpoint
+                    kpoints.append(this_kpoint)
                     this_kpoint = Kpoint((kx, ky, kz), weight, planewaves)
-                gvecs = np.zeros((planewaves, 3), dtype=float)
-                evec = np.zeros((planewaves, 2), dtype=float)
-                for i in range(planewaves):
-                    (gvecs[i, 0], gvecs[i, 1], gvecs[i, 2],
-                     evec[i, 0], evec[i, 1]) = f.readline().split()
-                this_kpoint.append(EigenV(occ, gvecs, evec))
+            except NameError:
+                this_kpoint = Kpoint((kx, ky, kz), weight, planewaves)
+            gvecs = np.zeros((planewaves, 3), dtype=float)
+            evec = np.zeros((planewaves, 2), dtype=float)
+            for i in range(planewaves):
+                (gvecs[i, 0], gvecs[i, 1], gvecs[i, 2],
+                    evec[i, 0], evec[i, 1]) = f.readline().split()
+            this_kpoint.append(EigenV(occ, gvecs, evec))
     print("finished reading kpoint {}".format(this_kpoint.kcoords))
     kpoints.append(this_kpoint)
     return kpoints
