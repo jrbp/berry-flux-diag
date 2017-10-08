@@ -33,7 +33,7 @@ class EigenV():
 
     def get_evec_complex(self):
         "get evec as a 1d complex vector"
-        return self.evec[:, 0] + self.evec[:, 1]*1j
+        return self.evec[:, 0] + self.evec[:, 1]*1.j
 
 
 class Kpoint(MutableSequence):
@@ -164,21 +164,60 @@ def find_min_singular_value(wfc0, wfc1):
     return s_mins.min(), wfc0[s_mins.argmin()].kcoords
 
 
-def compute_phase_diff_along_string(wfc0, wfc1, kx, ky):
+# def compute_phase_diff_along_string(wfc0, wfc1, kx, ky):
+#     tot_phase_change = 0.
+#     for kpt0, kpt1 in zip(wfc0, wfc1):
+#         part_of_string = (kpt0.kcoords[0] == kx
+#                           and kpt0.kcoords[2] >= 0.
+#                           and kpt0.kcoords[1] == ky)
+#         if part_of_string:
+#             overlap = compute_overlap(kpt0.get_occupied_only(),
+#                                       kpt1.get_occupied_only())
+#             u, s, v = np.linalg.svd(overlap)
+#             unit_overlap = np.dot(u, v)
+#             phase_change = (-1 * log(np.linalg.det(unit_overlap)).imag)
+#             print(kpt0.kcoords, np.linalg.det(unit_overlap), " ", phase_change)
+#             tot_phase_change += phase_change
+#     return tot_phase_change
+
+def bphase_along_string(kpt_string, pt=False):
     tot_phase_change = 0.
-    for kpt0, kpt1 in zip(wfc0, wfc1):
-        part_of_string = (kpt0.kcoords[0] == kx
-                          and kpt0.kcoords[2] >= 0.
-                          and kpt0.kcoords[1] == ky)
-        if part_of_string:
-            overlap = compute_overlap(kpt0.get_occupied_only(),
-                                      kpt1.get_occupied_only())
-            u, s, v = np.linalg.svd(overlap)
-            unit_overlap = np.dot(u, v)
-            phase_change = (-1 * log(np.linalg.det(unit_overlap)).imag)
-            print(kpt0.kcoords, " ", phase_change)
-            tot_phase_change += phase_change
+    for i in range(len(kpt_string)-1):
+        if pt:
+            pass
+            # if i == 0:
+            #     last_k = kpt_string[0]
+            # raw_overlap = compute_overlap(last_k, kpt_string[i+1])
+            # u, s, v = np.linalg.svd(raw_overlap)
+            # #last_k = np.dot(v, np.array([v.get_evec_complex() for v in kpt_string[i+1]]))
+            # overlap = np.dot(u, v)
+        else:
+            overlap = compute_overlap(kpt_string[i], kpt_string[i+1])
+        phase_change = -1 * log(np.linalg.det(overlap)).imag
+        print(kpt_string[i].kcoords, "->",
+              kpt_string[i+1].kcoords,
+              " ", phase_change)
+        tot_phase_change += phase_change
     return tot_phase_change
+
+
+def bphase_with_mult(kpt_string):
+    product = np.identity(len(kpt_string[0]))
+    for i in range(len(kpt_string) - 1):
+        overlap = compute_overlap(kpt_string[i], kpt_string[i+1])
+        product = np.dot(product, overlap)
+    return -1 * log(np.linalg.det(product)).imag
+
+
+def get_string(wfc, kx, ky):
+    result = []
+    for kpt in wfc:
+        in_this_string = ((abs(kpt.kcoords[0] - kx) < 1.e-5)
+                          and (abs(kpt.kcoords[1] - ky) < 1.e-5))
+        if in_this_string:
+            result.append(kpt)
+    result.sort(key=lambda k: k.kcoords[-1])
+    return result
 
 
 if __name__ == '__main__':
@@ -186,22 +225,35 @@ if __name__ == '__main__':
 
     print("reading {}".format(sys.argv[1]))
     wfc0 = read_wfc(sys.argv[1])
-    print("reading {}".format(sys.argv[2]))
-    wfc1 = read_wfc(sys.argv[2])
+    # print("reading {}".format(sys.argv[2]))
+    # wfc1 = read_wfc(sys.argv[2])
 
-    print("smallest singular value is "
-          "{} at the point {}".format(*find_min_singular_value(wfc0, wfc1)))
+    # print("smallest singular value is "
+    #       "{} at the point {}".format(*find_min_singular_value(wfc0, wfc1)))
 
     bz_2d_points = []
     for kpt in wfc0:
         bz_2d_points.append((kpt.kcoords[0], kpt.kcoords[1]))
 
-    string_vals = []
-    num_strings = len(set(bz_2d_points))
+    bps = []
     for kx, ky in set(bz_2d_points):
-        print(kx, ", ", ky)
-        val = compute_phase_diff_along_string(wfc0, wfc1, kx, ky)
-        string_vals.append(val)
-        print(val)
         print()
-    print(sum(string_vals)/num_strings)
+        this_string = get_string(wfc0, kx, ky)
+        bp = bphase_along_string(this_string, pt=False)
+        # bp = bphase_with_mult(this_string)
+        bps.append(bp)
+        print(kx, "\t", ky, '\t\t', bp / np.pi)
+
+    print()
+    print(sum(bps) / len(bps))
+
+    # string_vals = []
+    # num_strings = len(set(bz_2d_points))
+    # for kx, ky in set(bz_2d_points):
+    #     print(kx, ", ", ky)
+    #     val = compute_phase_diff_along_string(wfc0, wfc1, kx, ky)
+    #     string_vals.append(val)
+    #     print(val)
+    #     print()
+    # print(sum(string_vals)/num_strings)
+    # print(sum(string_vals)/(4 * np.pi))
