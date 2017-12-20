@@ -99,6 +99,18 @@ class Kpoint(MutableSequence):
                       [s for s in self.eigenvs if s.occupation > 0.9])
 
 
+def sort_eigenv(eigenv, kcoord=[0., 0., 0.]):
+    "returns an EigenV object with components sorted by magnitude of the gvector+kcoord"
+    gv_ev = list(zip(eigenv.gvecs, eigenv.evec))
+    sorted_gv_ev = sorted(gv_ev,
+                          key=(lambda x:
+                               np.linalg.norm(np.array(x[0]) + np.array(kcoord))))
+    sorted_gv = np.array([x[0] for x in sorted_gv_ev])
+    sorted_ev = np.array([x[1] for x in sorted_gv_ev])
+    sorted_eigenv = EigenV(eigenv.occupation, sorted_gv, sorted_ev)
+    return sorted_eigenv
+
+
 def read_wfc(wfc_file, return_first_k=False):
     """
     Args:
