@@ -111,7 +111,7 @@ def sort_eigenv(eigenv, kcoord=[0., 0., 0.]):
     return sorted_eigenv
 
 
-def read_wfc(wfc_file, return_first_k=False):
+def read_wfc(wfc_file, return_first_k=False, sort_by_gvec_mag=True):
     """
     Args:
         wfc_file: file to read in (from output of modified cut3d)
@@ -144,7 +144,10 @@ def read_wfc(wfc_file, return_first_k=False):
             for i in range(planewaves):
                 (gvecs[i, 0], gvecs[i, 1], gvecs[i, 2],
                     evec[i, 0], evec[i, 1]) = f.readline().split()
-            this_kpoint.append(EigenV(occ, gvecs, evec))
+            if sort_by_gvec_mag:
+                this_kpoint.append(sort_eigenv(EigenV(occ, gvecs, evec)))
+            else:
+                this_kpoint.append(EigenV(occ, gvecs, evec))
     print("finished reading kpoint {}".format(this_kpoint.kcoords))
     kpoints.append(this_kpoint)
     return kpoints
