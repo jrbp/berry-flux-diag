@@ -3,6 +3,7 @@ from collections import MutableSequence
 from itertools import count
 from cmath import log
 import numpy as np
+from numba import jit
 
 
 class EigenV():
@@ -140,7 +141,7 @@ def read_wfc(wfc_file, return_first_k=False, sort_by_gvec_mag=False):
                     this_kpoint = Kpoint((kx, ky, kz), weight, planewaves)
             except NameError:
                 this_kpoint = Kpoint((kx, ky, kz), weight, planewaves)
-            gvecs = np.zeros((planewaves, 3), dtype=float)
+            gvecs = np.zeros((planewaves, 3), dtype=int)
             evec = np.zeros((planewaves, 2), dtype=float)
             for i in range(planewaves):
                 (gvecs[i, 0], gvecs[i, 1], gvecs[i, 2],
@@ -162,14 +163,29 @@ def compute_overlap(evs0, evs1):
     overlap = np.zeros((len(evs0), len(evs0)), dtype=complex)
     for m, ev0 in enumerate(evs0):
         for n, ev1 in enumerate(evs1):
-            min_gvecs = min([len(ev0.get_evec_complex()), len(ev1.get_evec_complex())])
             # overlap[m, n] = np.vdot(ev0.get_evec_complex(),
             #                         ev1.get_evec_complex())
-            overlap[m, n] = np.vdot(ev0.get_evec_complex()[:min_gvecs],
-                                    ev1.get_evec_complex()[:min_gvecs])
-            # overlap[m, n] = np.vdot(ev0.get_evec_complex(),
-            #                         ev1.get_evec_complex())
+            # min_gvecs = min([len(ev0.get_evec_complex()), len(ev1.get_evec_complex())])
+            # overlap[m, n] = np.vdot(ev0.get_evec_complex()[:min_gvecs],
+            #                         ev1.get_evec_complex()[:min_gvecs])
+            # this_element = 0.
+            # for gvec0, ipw0 in zip(ev0.gvecs, np.conj(ev0.get_evec_complex())):
+            #     for gvec1, ipw1 in zip(ev1.gvecs, ev1.get_evec_complex()):
+            #         if all(gvec0 == gvec1):
+            #             this_element += ipw0 * ipw1
+            overlap[m, n] = compute_overlap_element(ev0.gvecs, np.conj(ev0.get_evec_complex()),
+                                                    ev1.gvecs, ev1.get_evec_complex())
     return overlap
+
+
+@jit(nopython=True, cache=True)
+def compute_overlap_element(gvs0, ev0_conj, gvs1, ev1):
+    this_element = 0.
+    for i in range(len(gvs0)):
+        for j in range(len(gvs1)):
+            if (gvs0[i][0] == gvs1[j][0] and gvs0[i][1] == gvs1[j][1] and gvs0[i][2] == gvs1[j][2]):
+                this_element += ev0_conj[i] * ev1[j]
+    return this_element
 
 
 def find_min_singular_value(wfc0, wfc1):
@@ -231,9 +247,9 @@ def bphase_along_string(kpt_string, pt=False):
         s, lndet = np.linalg.slogdet(overlap)
         #print(s, lndet)
         phase_change = -1 * log(s).imag
-        # print(fromkpt.kcoords, "->",
-        #       tokpt.kcoords,
-        #       " ", phase_change)
+        print(fromkpt.kcoords, "->",
+              tokpt.kcoords,
+              " ", phase_change / (2 * np.pi))
         tot_phase_change += phase_change
     return tot_phase_change
 
@@ -336,14 +352,14 @@ if __name__ == '__main__':
     for kpt, phase, in zip(string_coords, polb_str):
         print(kpt, phase)
 
-    # bps = []
-    # for kx, ky in set(bz_2d_points):
-    #     print()
-    #     this_string = get_string(wfc0, kx, ky)
-    #     bp_s = bphase_along_string(this_string, pt=False)
-    #     bp = bphase_with_mult(this_string)
-    #     bps.append(bp)
-    #     print(kx, "\t", ky, '\t\t', (2 * bp) / (2*np.pi), (2 * bp_s) / (2*np.pi))
+    bps = []
+    for kx, ky in set(bz_2d_points):
+        print()
+        this_string = get_string(wfc0, kx, ky)
+        bp_s = bphase_along_string(this_string, pt=False)
+        bp = bphase_with_mult(this_string)
+        bps.append(bp)
+        print(kx, "\t", ky, '\t\t', (2 * bp) / (2*np.pi), (2 * bp_s) / (2*np.pi))
 
     # print()
     # print(2 * sum(bps) / (2 * np.pi * len(bps)))
