@@ -111,7 +111,7 @@ def sort_eigenv(eigenv, kcoord=[0., 0., 0.]):
     return sorted_eigenv
 
 
-def read_wfc(wfc_file, return_first_k=False, sort_by_gvec_mag=True):
+def read_wfc(wfc_file, return_first_k=False, sort_by_gvec_mag=False):
     """
     Args:
         wfc_file: file to read in (from output of modified cut3d)
@@ -124,10 +124,11 @@ def read_wfc(wfc_file, return_first_k=False, sort_by_gvec_mag=True):
         for line in f:
             (max_planewaves, pws_in_calc, weight,
                 kx, ky, kz, occ) = [float(x) for x in line.split()]
-            # important:  below change planewaves between the following two lines
+            # IMPORTANT:  below change planewaves between the following two lines
             #             if using the fft to make same number of planewaves at each kpt
-            planewaves = int(max_planewaves)
-            # planewaves = int(pws_in_calc)
+            #             this is due to how the modified cut3d is writing wfcs, and should be changed there
+            planewaves = int(max_planewaves)  # if fft used
+            # planewaves = int(pws_in_calc)   # if fft not used
             try:
                 # if this_kpoint.kcoords != (kx, ky, kz): # should subtract for comparison of floats
                 if (np.abs(np.array(this_kpoint.kcoords) - np.array([kx, ky, kz])) > 1.e-5).any():
@@ -161,13 +162,13 @@ def compute_overlap(evs0, evs1):
     overlap = np.zeros((len(evs0), len(evs0)), dtype=complex)
     for m, ev0 in enumerate(evs0):
         for n, ev1 in enumerate(evs1):
-            # min_gvecs = min([len(ev0.get_evec_complex()), len(ev1.get_evec_complex())])
+            min_gvecs = min([len(ev0.get_evec_complex()), len(ev1.get_evec_complex())])
             # overlap[m, n] = np.vdot(ev0.get_evec_complex(),
             #                         ev1.get_evec_complex())
-            # overlap[m, n] = np.vdot(ev0.get_evec_complex()[:min_gvecs],
-            #                         ev1.get_evec_complex()[:min_gvecs])
-            overlap[m, n] = np.vdot(ev0.get_evec_complex(),
-                                    ev1.get_evec_complex())
+            overlap[m, n] = np.vdot(ev0.get_evec_complex()[:min_gvecs],
+                                    ev1.get_evec_complex()[:min_gvecs])
+            # overlap[m, n] = np.vdot(ev0.get_evec_complex(),
+            #                         ev1.get_evec_complex())
     return overlap
 
 
