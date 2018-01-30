@@ -183,9 +183,9 @@ def compute_overlap_element(gvs0, ev0_conj, gvs1, ev1, dg):
     this_element = 0.
     for i in range(len(gvs0)):
         for j in range(len(gvs1)):
-            if (gvs0[i][0] == gvs1[j][0] - dg[0]
-               and gvs0[i][1] == gvs1[j][1] - dg[1]
-               and gvs0[i][2] == gvs1[j][2] - dg[2]):
+            if (gvs0[i][0] == gvs1[j][0] + dg[0]
+               and gvs0[i][1] == gvs1[j][1] + dg[1]
+               and gvs0[i][2] == gvs1[j][2] + dg[2]):
                 this_element += ev0_conj[i] * ev1[j]
     return this_element
 
@@ -260,12 +260,15 @@ def bphase_along_string(kpt_string, pt=False):
 
 
 def bphase_with_mult(kpt_string):
-    product = np.identity(len(kpt_string[0]), dtype=complex)
+    product = np.identity(len(kpt_string[0].get_occupied_only()), dtype=complex)
     for i in range(len(kpt_string)):
         if i == len(kpt_string) - 1:
-            overlap = compute_overlap(kpt_string[i], kpt_string[0])
+            overlap = compute_overlap(kpt_string[i].get_occupied_only(),
+                                      kpt_string[0].get_occupied_only(),
+                                      dg=np.array(np.array([0, 0, 1])))
         else:
-            overlap = compute_overlap(kpt_string[i], kpt_string[i+1])
+            overlap = compute_overlap(kpt_string[i].get_occupied_only(),
+                                      kpt_string[i+1].get_occupied_only())
         product = np.dot(product, overlap)
     s, lndet = np.linalg.slogdet(product)
     return -1 * log(s).imag
@@ -340,19 +343,20 @@ if __name__ == '__main__':
         this_string = get_string(wfc0, kx, ky)
         string_coords.append((kx, ky))
         this_det = det_of_string(this_string)
+        # this_det = det_of_string_mat_mult(this_string)
         det_strings.append(this_det)
         det_avg += this_det / nstr
 
-    phase0 = np.arctan2(det_avg.imag, det_avg.real)
-    # phase0 = np.log(det_avg).imag
+    phase0 = -1 * np.arctan2(det_avg.imag, det_avg.real)
+    # phase0 = -1 * np.log(det_avg).imag
     det_mod = np.conjugate(det_avg) * det_avg
 
     polb = 0.
     polb_str = []
     for det_string in det_strings:
         rel_string = (np.conj(det_avg) * det_string) / det_mod
-        dphase = np.arctan2(rel_string.imag, rel_string.real)
-        # dphase = np.log(rel_string).imag
+        dphase = -1 * np.arctan2(rel_string.imag, rel_string.real)
+        # dphase = -1 * np.log(rel_string).imag
         this_polb = 2*(phase0 + dphase) / (2 * np.pi)
         polb_str.append(this_polb)
         # print(this_polb)
