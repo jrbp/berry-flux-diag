@@ -207,23 +207,6 @@ def find_min_singular_value(wfc0, wfc1):
     return s_mins.min(), wfc0[s_mins.argmin()].kcoords
 
 
-# def compute_phase_diff_along_string(wfc0, wfc1, kx, ky):
-#     tot_phase_change = 0.
-#     for kpt0, kpt1 in zip(wfc0, wfc1):
-#         part_of_string = (kpt0.kcoords[0] == kx
-#                           and kpt0.kcoords[2] >= 0.
-#                           and kpt0.kcoords[1] == ky)
-#         if part_of_string:
-#             overlap = compute_overlap(kpt0.get_occupied_only(),
-#                                       kpt1.get_occupied_only())
-#             u, s, v = np.linalg.svd(overlap)
-#             unit_overlap = np.dot(u, v)
-#             phase_change = (-1 * log(np.linalg.det(unit_overlap)).imag)
-#             print(kpt0.kcoords, np.linalg.det(unit_overlap), " ", phase_change)
-#             tot_phase_change += phase_change
-#     return tot_phase_change
-
-
 def bphase_along_string(kpt_string, pt=False):
     tot_phase_change = 0.
     for i in range(len(kpt_string)):
@@ -250,7 +233,7 @@ def bphase_along_string(kpt_string, pt=False):
         # this_det = np.linalg.det(overlap)
         # phase_change = -1 * log(this_det).imag
         s, lndet = np.linalg.slogdet(overlap)
-        #print(s, lndet)
+        # print(s, lndet)
         phase_change = -1 * log(s).imag
         print(fromkpt.kcoords, "->",
               tokpt.kcoords,
@@ -282,7 +265,8 @@ def det_of_string_mat_mult(kpt_string):
                                       kpt_string[0].get_occupied_only(),
                                       dg=np.array([0, 0, 1]))
         else:
-            overlap = compute_overlap(kpt_string[i].get_occupied_only(), kpt_string[i+1].get_occupied_only())
+            overlap = compute_overlap(kpt_string[i].get_occupied_only(),
+                                      kpt_string[i+1].get_occupied_only())
         product = np.dot(product, overlap)
     # s, lndet = np.linalg.slogdet(product)   # Do I need to be careful about numerics here?
     # return s * np.exp(lndet)
@@ -319,73 +303,68 @@ def get_string(wfc, kx, ky):
     return result
 
 
+def get_berry_phase_polarization(wfc, method=None):
+    bz_2d_points = []
+    for kpt in wfc:
+        bz_2d_points.append((kpt.kcoords[0], kpt.kcoords[1]))
+
+    nstr = len(set(bz_2d_points))
+
+    if method is None or method == 'det_avg':
+        det_strings = []
+        string_coords = []
+        det_avg = 0
+        for kx, ky in set(bz_2d_points):
+            print("computing phase for string {}, {}".format(kx, ky))
+            this_string = get_string(wfc, kx, ky)
+            string_coords.append((kx, ky))
+            this_det = det_of_string(this_string)
+            # this_det = det_of_string_mat_mult(this_string)
+            det_strings.append(this_det)
+            det_avg += this_det / nstr
+
+            phase0 = -1 * np.arctan2(det_avg.imag, det_avg.real)
+            # phase0 = -1 * np.log(det_avg).imag
+            det_mod = np.conjugate(det_avg) * det_avg
+
+            polb = 0.
+            polb_str = []
+            for det_string in det_strings:
+                rel_string = (np.conj(det_avg) * det_string) / det_mod
+                dphase = -1 * np.arctan2(rel_string.imag, rel_string.real)
+                # dphase = -1 * np.log(rel_string).imag
+                this_polb = 2*(phase0 + dphase) / (2 * np.pi)
+                polb_str.append(this_polb)
+                # print(this_polb)
+                polb += this_polb / float(nstr)
+                # print(nstr)
+        # for kpt, phase, in zip(string_coords, polb_str):
+        #     print(kpt, phase)
+
+    else:
+        bps = []
+        for kx, ky in set(bz_2d_points):
+            print()
+            this_string = get_string(wfc, kx, ky)
+            bp_s = bphase_along_string(this_string, pt=False)
+            bp = bphase_with_mult(this_string)
+            bps.append(bp)
+            print(kx, "\t", ky, '\t\t', (2 * bp) / (2*np.pi), (2 * bp_s) / (2*np.pi))
+        polb = 2 * sum(bps) / (2 * np.pi * len(bps))
+    return polb
+
+
 if __name__ == '__main__':
     import sys
 
     print("reading {}".format(sys.argv[1]))
     wfc0 = read_wfc(sys.argv[1])
+
+    bp0 = get_berry_phase_polarization(wfc0)
+    print("Electronic berry phase: {}".format(bp0))
+
     # print("reading {}".format(sys.argv[2]))
     # wfc1 = read_wfc(sys.argv[2])
 
     # print("smallest singular value is "
     #       "{} at the point {}".format(*find_min_singular_value(wfc0, wfc1)))
-
-    bz_2d_points = []
-    for kpt in wfc0:
-        bz_2d_points.append((kpt.kcoords[0], kpt.kcoords[1]))
-
-    nstr = len(set(bz_2d_points))
-    det_strings = []
-    string_coords = []
-    det_avg = 0
-    for kx, ky in set(bz_2d_points):
-        print(kx, ky)
-        this_string = get_string(wfc0, kx, ky)
-        string_coords.append((kx, ky))
-        this_det = det_of_string(this_string)
-        # this_det = det_of_string_mat_mult(this_string)
-        det_strings.append(this_det)
-        det_avg += this_det / nstr
-
-    phase0 = -1 * np.arctan2(det_avg.imag, det_avg.real)
-    # phase0 = -1 * np.log(det_avg).imag
-    det_mod = np.conjugate(det_avg) * det_avg
-
-    polb = 0.
-    polb_str = []
-    for det_string in det_strings:
-        rel_string = (np.conj(det_avg) * det_string) / det_mod
-        dphase = -1 * np.arctan2(rel_string.imag, rel_string.real)
-        # dphase = -1 * np.log(rel_string).imag
-        this_polb = 2*(phase0 + dphase) / (2 * np.pi)
-        polb_str.append(this_polb)
-        # print(this_polb)
-        polb += this_polb / float(nstr)
-    # print(nstr)
-    print(polb)
-
-    # for kpt, phase, in zip(string_coords, polb_str):
-    #     print(kpt, phase)
-
-    # bps = []
-    # for kx, ky in set(bz_2d_points):
-    #     print()
-    #     this_string = get_string(wfc0, kx, ky)
-    #     bp_s = bphase_along_string(this_string, pt=False)
-    #     bp = bphase_with_mult(this_string)
-    #     bps.append(bp)
-    #     print(kx, "\t", ky, '\t\t', (2 * bp) / (2*np.pi), (2 * bp_s) / (2*np.pi))
-
-    # print()
-    # print(2 * sum(bps) / (2 * np.pi * len(bps)))
-
-    # string_vals = []
-    # num_strings = len(set(bz_2d_points))
-    # for kx, ky in set(bz_2d_points):
-    #     print(kx, ", ", ky)
-    #     val = compute_phase_diff_along_string(wfc0, wfc1, kx, ky)
-    #     string_vals.append(val)
-    #     print(val)
-    #     print()
-    # print(sum(string_vals)/num_strings)
-    # print(sum(string_vals)/(4 * np.pi))
