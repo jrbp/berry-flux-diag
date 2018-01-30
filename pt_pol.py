@@ -155,7 +155,7 @@ def read_wfc(wfc_file, return_first_k=False, sort_by_gvec_mag=False):
     return kpoints
 
 
-def compute_overlap(evs0, evs1):
+def compute_overlap(evs0, evs1, dg=np.array([0, 0, 0])):
     """
     Args: evs0, evs1: each a list of EigenV objects
     Returns: overlap matrix overlap[m,n] = <evs0_m | evs1_n>
@@ -174,16 +174,18 @@ def compute_overlap(evs0, evs1):
             #         if all(gvec0 == gvec1):
             #             this_element += ipw0 * ipw1
             overlap[m, n] = compute_overlap_element(ev0.gvecs, np.conj(ev0.get_evec_complex()),
-                                                    ev1.gvecs, ev1.get_evec_complex())
+                                                    ev1.gvecs, ev1.get_evec_complex(), dg)
     return overlap
 
 
 @jit(nopython=True, cache=True)
-def compute_overlap_element(gvs0, ev0_conj, gvs1, ev1):
+def compute_overlap_element(gvs0, ev0_conj, gvs1, ev1, dg):
     this_element = 0.
     for i in range(len(gvs0)):
         for j in range(len(gvs1)):
-            if (gvs0[i][0] == gvs1[j][0] and gvs0[i][1] == gvs1[j][1] and gvs0[i][2] == gvs1[j][2]):
+            if (gvs0[i][0] == gvs1[j][0] - dg[0]
+               and gvs0[i][1] == gvs1[j][1] - dg[1]
+               and gvs0[i][2] == gvs1[j][2] - dg[2]):
                 this_element += ev0_conj[i] * ev1[j]
     return this_element
 
@@ -237,11 +239,14 @@ def bphase_along_string(kpt_string, pt=False):
             if i == len(kpt_string) - 1:
                 fromkpt = kpt_string[i]
                 tokpt = kpt_string[0]
-                overlap = compute_overlap(kpt_string[i], kpt_string[0])
+                overlap = compute_overlap(kpt_string[i].get_occupied_only(),
+                                          kpt_string[0].get_occupied_only(),
+                                          dg=np.array([0, 0, 1]))
             else:
                 fromkpt = kpt_string[i]
                 tokpt = kpt_string[i + 1]
-                overlap = compute_overlap(kpt_string[i], kpt_string[i+1])
+                overlap = compute_overlap(kpt_string[i].get_occupied_only(),
+                                          kpt_string[i+1].get_occupied_only())
         # this_det = np.linalg.det(overlap)
         # phase_change = -1 * log(this_det).imag
         s, lndet = np.linalg.slogdet(overlap)
@@ -270,7 +275,9 @@ def det_of_string_mat_mult(kpt_string):
     product = np.identity(len(kpt_string[0].get_occupied_only()), dtype=complex)
     for i in range(len(kpt_string)):
         if i == len(kpt_string) - 1:
-            overlap = compute_overlap(kpt_string[i].get_occupied_only(), kpt_string[0].get_occupied_only())
+            overlap = compute_overlap(kpt_string[i].get_occupied_only(),
+                                      kpt_string[0].get_occupied_only(),
+                                      dg=np.array([0, 0, 1]))
         else:
             overlap = compute_overlap(kpt_string[i].get_occupied_only(), kpt_string[i+1].get_occupied_only())
         product = np.dot(product, overlap)
@@ -284,10 +291,13 @@ def det_of_string(kpt_string):
     # set_of_overlaps = ""
     for i in range(len(kpt_string)):
         if i == len(kpt_string) - 1:
-            overlap = compute_overlap(kpt_string[i].get_occupied_only(), kpt_string[0].get_occupied_only())
+            overlap = compute_overlap(kpt_string[i].get_occupied_only(),
+                                      kpt_string[0].get_occupied_only(),
+                                      dg=np.array([0, 0, 1]))
             # set_of_overlaps += str(kpt_string[i].kcoords) + '-->' + str(kpt_string[0].kcoords) + '\n'
         else:
-            overlap = compute_overlap(kpt_string[i].get_occupied_only(), kpt_string[i+1].get_occupied_only())
+            overlap = compute_overlap(kpt_string[i].get_occupied_only(),
+                                      kpt_string[i+1].get_occupied_only())
             # set_of_overlaps += str(kpt_string[i].kcoords) + '-->' + str(kpt_string[i+1].kcoords) + '\n'
         determinant = np.linalg.det(overlap)
         det_product *= determinant
@@ -326,6 +336,7 @@ if __name__ == '__main__':
     string_coords = []
     det_avg = 0
     for kx, ky in set(bz_2d_points):
+        print(kx, ky)
         this_string = get_string(wfc0, kx, ky)
         string_coords.append((kx, ky))
         this_det = det_of_string(this_string)
@@ -346,20 +357,20 @@ if __name__ == '__main__':
         polb_str.append(this_polb)
         # print(this_polb)
         polb += this_polb / float(nstr)
-    print(nstr)
+    # print(nstr)
     print(polb)
 
-    for kpt, phase, in zip(string_coords, polb_str):
-        print(kpt, phase)
+    # for kpt, phase, in zip(string_coords, polb_str):
+    #     print(kpt, phase)
 
-    bps = []
-    for kx, ky in set(bz_2d_points):
-        print()
-        this_string = get_string(wfc0, kx, ky)
-        bp_s = bphase_along_string(this_string, pt=False)
-        bp = bphase_with_mult(this_string)
-        bps.append(bp)
-        print(kx, "\t", ky, '\t\t', (2 * bp) / (2*np.pi), (2 * bp_s) / (2*np.pi))
+    # bps = []
+    # for kx, ky in set(bz_2d_points):
+    #     print()
+    #     this_string = get_string(wfc0, kx, ky)
+    #     bp_s = bphase_along_string(this_string, pt=False)
+    #     bp = bphase_with_mult(this_string)
+    #     bps.append(bp)
+    #     print(kx, "\t", ky, '\t\t', (2 * bp) / (2*np.pi), (2 * bp_s) / (2*np.pi))
 
     # print()
     # print(2 * sum(bps) / (2 * np.pi * len(bps)))
