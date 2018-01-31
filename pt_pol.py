@@ -163,6 +163,8 @@ def compute_overlap(evs0, evs1, dg=np.array([0, 0, 0])):
     overlap = np.zeros((len(evs0), len(evs0)), dtype=complex)
     for m, ev0 in enumerate(evs0):
         for n, ev1 in enumerate(evs1):
+            # below are old methods, they are quick, but assume each ev has the same gvecs in the same order
+
             # overlap[m, n] = np.vdot(ev0.get_evec_complex(),
             #                         ev1.get_evec_complex())
             # min_gvecs = min([len(ev0.get_evec_complex()), len(ev1.get_evec_complex())])
@@ -207,17 +209,21 @@ def find_min_singular_value(wfc0, wfc1):
     return s_mins.min(), wfc0[s_mins.argmin()].kcoords
 
 
-def bphase_along_string(kpt_string, pt=False):
+def bphase_along_string(kpt_string, cheap_pt=False):
     tot_phase_change = 0.
     for i in range(len(kpt_string)):
-        if pt:
-            pass
-            # if i == 0:
-            #     last_k = kpt_string[0]
-            # raw_overlap = compute_overlap(last_k, kpt_string[i+1])
-            # u, s, v = np.linalg.svd(raw_overlap)
-            # #last_k = np.dot(v, np.array([v.get_evec_complex() for v in kpt_string[i+1]]))
-            # overlap = np.dot(u, v)
+        if cheap_pt:
+            if i == len(kpt_string) - 1:
+                fromkpt = kpt_string[i].get_occupied_only()
+                tokpt = kpt_string[0].get_occupied_only()
+                raw_overlap = compute_overlap(fromkpt, tokpt,
+                                              dg=np.array([0, 0, 1]))
+            else:
+                fromkpt = kpt_string[i].get_occupied_only()
+                tokpt = kpt_string[i + 1].get_occupied_only()
+                raw_overlap = compute_overlap(fromkpt, tokpt)
+            u, s, v = np.linalg.svd(raw_overlap)
+            overlap = np.dot(u, v)
         else:
             if i == len(kpt_string) - 1:
                 fromkpt = kpt_string[i]
@@ -237,21 +243,34 @@ def bphase_along_string(kpt_string, pt=False):
         phase_change = log(s).imag
         print(fromkpt.kcoords, "->",
               tokpt.kcoords,
-              " ", phase_change / (2 * np.pi))
+              " ", 2 * phase_change / (2 * np.pi))
         tot_phase_change += phase_change
     return tot_phase_change
 
 
-def bphase_with_mult(kpt_string):
+def bphase_with_mult(kpt_string, cheap_pt=False):
     product = np.identity(len(kpt_string[0].get_occupied_only()), dtype=complex)
     for i in range(len(kpt_string)):
-        if i == len(kpt_string) - 1:
-            overlap = compute_overlap(kpt_string[i].get_occupied_only(),
-                                      kpt_string[0].get_occupied_only(),
-                                      dg=np.array(np.array([0, 0, 1])))
+        if cheap_pt:
+            if i == len(kpt_string) - 1:
+                fromkpt = kpt_string[i].get_occupied_only()
+                tokpt = kpt_string[0].get_occupied_only()
+                raw_overlap = compute_overlap(fromkpt, tokpt,
+                                              dg=np.array([0, 0, 1]))
+            else:
+                fromkpt = kpt_string[i].get_occupied_only()
+                tokpt = kpt_string[i + 1].get_occupied_only()
+                raw_overlap = compute_overlap(fromkpt, tokpt)
+            u, s, v = np.linalg.svd(raw_overlap)
+            overlap = np.dot(u, v)
         else:
-            overlap = compute_overlap(kpt_string[i].get_occupied_only(),
-                                      kpt_string[i+1].get_occupied_only())
+            if i == len(kpt_string) - 1:
+                overlap = compute_overlap(kpt_string[i].get_occupied_only(),
+                                          kpt_string[0].get_occupied_only(),
+                                          dg=np.array(np.array([0, 0, 1])))
+            else:
+                overlap = compute_overlap(kpt_string[i].get_occupied_only(),
+                                          kpt_string[i+1].get_occupied_only())
         product = np.dot(product, overlap)
     s, lndet = np.linalg.slogdet(product)
     return log(s).imag
@@ -346,12 +365,39 @@ def get_berry_phase_polarization(wfc, method=None):
         for kx, ky in set(bz_2d_points):
             print()
             this_string = get_string(wfc, kx, ky)
-            bp_s = bphase_along_string(this_string, pt=False)
-            bp = bphase_with_mult(this_string)
+            bp_s = bphase_along_string(this_string, cheap_pt=False)
+            bp = bphase_with_mult(this_string, cheap_pt=False)
             bps.append(bp)
             print(kx, "\t", ky, '\t\t', (2 * bp) / (2*np.pi), (2 * bp_s) / (2*np.pi))
         polb = 2 * sum(bps) / (2 * np.pi * len(bps))
     return polb
+
+
+def construct_smooth_gauge(kpoint_string):
+    """Takes a list of kpoint objects
+    returns list of kpoint objects where unitary rotations have been applied mixing
+    wavefunctions of different bands to achieve maximal alignment"""
+    pass
+
+
+# def compute_phase_diff_along_string(wfc0, wfc1, kx, ky):
+#     tot_phase_change = 0.
+#     for kpt0, kpt1 in zip(wfc0, wfc1):
+#         print(kpt0.kcoords, kpt1.kcoords)
+#         part_of_string = (kpt0.kcoords[0] == kx
+#                           # and kpt0.kcoords[2] >= 0.
+#                           and kpt0.kcoords[1] == ky)
+#         if part_of_string:
+#             overlap = compute_overlap(kpt0.get_occupied_only(),
+#                                       kpt1.get_occupied_only())
+#             u, s, v = np.linalg.svd(overlap)
+#             unit_overlap = np.dot(u, v)
+#             phase_change = 2 * log(np.linalg.det(unit_overlap)).imag / (2 * np.pi)
+#             no_pt_phase_change = 2 * log(np.linalg.det(overlap)).imag / (2 * np.pi)
+#             print(kpt0.kcoords, np.linalg.det(unit_overlap), " ", phase_change)
+#             print(no_pt_phase_change)
+#             tot_phase_change += phase_change
+#     return tot_phase_change
 
 
 if __name__ == '__main__':
