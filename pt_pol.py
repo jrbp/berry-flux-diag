@@ -426,11 +426,58 @@ if __name__ == '__main__':
     wfc0 = read_wfc(sys.argv[1])
 
     # bp0 = get_berry_phase_polarization(wfc0, method='verbose')
-    bp0 = get_berry_phase_polarization(wfc0)
-    print("Electronic berry phase: {}".format(bp0))
+    # bp0 = get_berry_phase_polarization(wfc0)
+    # print("Electronic berry phase: {}".format(bp0))
 
-    # print("reading {}".format(sys.argv[2]))
-    # wfc1 = read_wfc(sys.argv[2])
+    print("reading {}".format(sys.argv[2]))
+    wfc1 = read_wfc(sys.argv[2])
+
+    kpt_a0 = wfc0[0].get_occupied_only()
+    kpt_b0 = wfc1[0].get_occupied_only()
+
+    overlap_ab0 = compute_overlap(kpt_a0, kpt_b0)
+    phase_ab0 = np.log(np.linalg.det(overlap_ab0)).imag
+    print("phase a-b at gamma = {}".format(phase_ab0))
+    u, s, v = np.linalg.svd(overlap_ab0)
+    pt_overlap_ab0 = np.dot(u, v)
+    pt_phase_ab0 = np.log(np.linalg.det(pt_overlap_ab0)).imag
+    print("pt phase a-b at gamma = {}".format(pt_phase_ab0))
+
+
+    overlap_ab1 = compute_overlap(kpt_a0.get_g_shifted([0, 0, 1]), kpt_b0.get_g_shifted([0, 0, 1]))
+    phase_ab1 = np.log(np.linalg.det(overlap_ab1)).imag
+    print("phase a-b at 0,0,1 = {}".format(phase_ab1))
+    u, s, v = np.linalg.svd(overlap_ab1)
+    pt_overlap_ab1 = np.dot(u, v)
+    pt_phase_ab1 = np.log(np.linalg.det(pt_overlap_ab1)).imag
+    print("pt phase a-b at gamma = {}".format(pt_phase_ab1))
+
+
+    print("difference = {}".format(phase_ab0 - phase_ab1))
+    print("pt difference = {}".format(pt_phase_ab0 - pt_phase_ab1))
+
+    # # find kpt indices along 0,0
+    # for i, k in enumerate(wfc0):
+    #     if k.kcoords[0] == 0 and k.kcoords[1] == 0:
+    #         print(i, k.kcoords)
+    # print()
+    # for i, k in enumerate(wfc1):
+    #     if k.kcoords[0] == 0 and k.kcoords[1] == 0:
+    #         print(i, k.kcoords)
 
     # print("smallest singular value is "
     #       "{} at the point {}".format(*find_min_singular_value(wfc0, wfc1)))
+
+    # bz_2d_points = []
+    # for kpt in wfc0:
+    #     bz_2d_points.append((kpt.kcoords[0], kpt.kcoords[1]))
+
+    # string_vals = []
+    # num_strings = len(set(bz_2d_points))
+    # for kx, ky in set(bz_2d_points):
+    #     print(kx, ", ", ky)
+    #     val = compute_phase_diff_along_string(wfc0, wfc1, kx, ky)
+    #     string_vals.append(val)
+    #     print(val)
+    #     print()
+    # print(sum(string_vals)/num_strings)
