@@ -408,8 +408,13 @@ def get_kpoint2_aligned_with_kpoint1(kpoint1, kpoint2):
                                      - rot_mat[i, j].imag * kpoint2[j].evec[:, 1])
             new_eigenvs[i, :, 1] += (rot_mat[i, j].real * kpoint2[j].evec[:, 1]
                                      + rot_mat[i, j].imag * kpoint2[j].evec[:, 0])
+    # TODO: maybe change things so we don't need to put the old occupations here, really
+    #       this function should only be called with Kpoint objects where all bands
+    #       are occupied, if this isn't the case the occupations assigned below are nonsense
+    new_eigenv_objects = [EigenV(kpoint2[n].occupation, kpoint2[n].gvecs, ev)
+                          for n, ev in enumerate(new_eigenvs)]
     new_kpt = Kpoint(kpoint2.kcoords, kpoint2.weight,
-                     kpoint2.planewaves, eigenvs=new_eigenvs)
+                     kpoint2.planewaves, eigenvs=new_eigenv_objects)
     return new_kpt
 
 
