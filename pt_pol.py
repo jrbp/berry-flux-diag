@@ -226,20 +226,20 @@ def bphase_along_string(kpt_string, cheap_pt=False):
             if i == len(kpt_string) - 1:
                 fromkpt = kpt_string[i].get_occupied_only()
                 tokpt = kpt_string[0].get_occupied_only()
-                raw_overlap = compute_overlap(fromkpt, tokpt,
-                                              dg=np.array([0, 0, 1]))
+                overlap = compute_overlap(fromkpt, tokpt,
+                                          dg=np.array([0, 0, 1]))
             else:
                 fromkpt = kpt_string[i].get_occupied_only()
                 tokpt = kpt_string[i + 1].get_occupied_only()
                 raw_overlap = compute_overlap(fromkpt, tokpt)
-            u, s, v = np.linalg.svd(raw_overlap)
-            overlap = np.dot(u, v)
+                u, s, v = np.linalg.svd(raw_overlap)
+                overlap = np.dot(u, v)
         else:
             if i == len(kpt_string) - 1:
-                fromkpt = kpt_string[i]
-                tokpt = kpt_string[0]
-                overlap = compute_overlap(kpt_string[i].get_occupied_only(),
-                                          kpt_string[0].get_occupied_only(),
+                fromkpt = kpt_string[i].get_occupied_only()
+                tokpt = kpt_string[0].get_occupied_only()
+                overlap = compute_overlap(fromkpt,
+                                          tokpt,
                                           dg=np.array([0, 0, 1]))
 
                 # # slower, test of get_g_shifted method
@@ -331,17 +331,15 @@ def det_of_string(kpt_string):
 
 
 def phase_string_true_pt(kpt_string):
-    all_kpts = kpt_string + [kpt_string[0].get_g_shifted([0, 0, 1])]
-    from_kpt = all_kpts[0].get_occupied_only()
+    from_kpt = kpt_string[0].get_occupied_only()
     tot_phase_change = 0.
     for i in range(len(kpt_string)):
         if i == len(kpt_string) - 1:
-            to_kpt = all_kpts[i+1].get_occupied_only()  # TODO: clean this up
+            to_kpt = kpt_string[0].get_g_shifted([0, 0, 1]).get_occupied_only()
         else:
-            to_kpt = get_kpoint2_aligned_with_kpoint1(from_kpt, all_kpts[i+1].get_occupied_only())
+            to_kpt = get_kpoint2_aligned_with_kpoint1(from_kpt, kpt_string[i+1].get_occupied_only())
         overlap = compute_overlap(from_kpt, to_kpt)
         s, lndet = np.linalg.slogdet(overlap)
-        # print(s, lndet)
         phase_change = log(s).imag
         print(from_kpt.kcoords, "->",
               to_kpt.kcoords,
