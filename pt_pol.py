@@ -51,7 +51,7 @@ class Kpoint(MutableSequence):
         self._kcoords = kcoords
         self._weight = weight
         self._planewaves = planewaves
-        if eigenvs:
+        if eigenvs is not None:
             self._eigenvs = eigenvs
         else:
             self._eigenvs = []
@@ -392,11 +392,25 @@ def get_berry_phase_polarization(wfc, method=None):
     return polb
 
 
-def construct_smooth_gauge(kpoint_string):
-    """Takes a list of kpoint objects
-    returns list of kpoint objects where unitary rotations have been applied mixing
-    wavefunctions of different bands to achieve maximal alignment"""
-    pass
+def get_kpoint2_aligned_with_kpoint1(kpoint1, kpoint2):
+    """returns a Kpoint object corresponding to kpoint2
+    with a unitary operation applied such that bands
+    are maximally aligned with kpoint1
+    """
+    raw_overlap = compute_overlap(kpoint1, kpoint2)
+    u, s, v = np.linalg.svd(raw_overlap)
+    rot_mat = np.linalg.inv(np.dot(u, v))
+    new_eigenvs = np.zeros((len(kpoint2), len(kpoint2[0].evec), 2))
+    for i in range(len(kpoint2)):
+        for j in range(len(kpoint2)):
+            # TODO: Should really just make EigenV store the complex number directly
+            new_eigenvs[i, :, 0] += (rot_mat[i, j].real * kpoint2[j].evec[:, 0]
+                                     - rot_mat[i, j].imag * kpoint2[j].evec[:, 1])
+            new_eigenvs[i, :, 1] += (rot_mat[i, j].real * kpoint2[j].evec[:, 1]
+                                     + rot_mat[i, j].imag * kpoint2[j].evec[:, 0])
+    new_kpt = Kpoint(kpoint2.kcoords, kpoint2.weight,
+                     kpoint2.planewaves, eigenvs=new_eigenvs)
+    return new_kpt
 
 
 # def compute_phase_diff_along_string(wfc0, wfc1, kx, ky):
@@ -441,20 +455,13 @@ if __name__ == '__main__':
     u, s, v = np.linalg.svd(overlap_ab0)
     pt_overlap_ab0 = np.dot(u, v)
     pt_phase_ab0 = np.log(np.linalg.det(pt_overlap_ab0)).imag
-    print("pt phase a-b at gamma = {}".format(pt_phase_ab0))
+    print("cheap_pt phase a-b at gamma = {}".format(pt_phase_ab0))
 
+    kpt_b0_rot = get_kpoint2_aligned_with_kpoint1(kpt_a0, kpt_b0)
+    overlap_true_pt = compute_overlap(kpt_a0, kpt_b0)
+    phase_true_pt = np.log(np.linalg.det(overlap_true_pt)).imag
+    print("true_pt phase a-b at gamma = {}".format(phase_true_pt))
 
-    overlap_ab1 = compute_overlap(kpt_a0.get_g_shifted([0, 0, 1]), kpt_b0.get_g_shifted([0, 0, 1]))
-    phase_ab1 = np.log(np.linalg.det(overlap_ab1)).imag
-    print("phase a-b at 0,0,1 = {}".format(phase_ab1))
-    u, s, v = np.linalg.svd(overlap_ab1)
-    pt_overlap_ab1 = np.dot(u, v)
-    pt_phase_ab1 = np.log(np.linalg.det(pt_overlap_ab1)).imag
-    print("pt phase a-b at gamma = {}".format(pt_phase_ab1))
-
-
-    print("difference = {}".format(phase_ab0 - phase_ab1))
-    print("pt difference = {}".format(pt_phase_ab0 - pt_phase_ab1))
 
     # # find kpt indices along 0,0
     # for i, k in enumerate(wfc0):
