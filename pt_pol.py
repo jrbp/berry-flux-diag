@@ -330,6 +330,26 @@ def det_of_string(kpt_string):
     return det_product
 
 
+def phase_string_true_pt(kpt_string):
+    all_kpts = kpt_string + [kpt_string[0].get_g_shifted([0, 0, 1])]
+    from_kpt = all_kpts[0].get_occupied_only()
+    tot_phase_change = 0.
+    for i in range(len(kpt_string)):
+        if i == len(kpt_string) - 1:
+            to_kpt = all_kpts[i+1].get_occupied_only()  # TODO: clean this up
+        else:
+            to_kpt = get_kpoint2_aligned_with_kpoint1(from_kpt, all_kpts[i+1].get_occupied_only())
+        overlap = compute_overlap(from_kpt, to_kpt)
+        s, lndet = np.linalg.slogdet(overlap)
+        # print(s, lndet)
+        phase_change = log(s).imag
+        print(from_kpt.kcoords, "->",
+              to_kpt.kcoords,
+              " ", 2 * phase_change / (2 * np.pi))
+        tot_phase_change += phase_change
+        from_kpt = to_kpt
+    return tot_phase_change
+
 def get_string(wfc, kx, ky):
     result = []
     for kpt in wfc:
@@ -379,6 +399,15 @@ def get_berry_phase_polarization(wfc, method=None):
         # for kpt, phase, in zip(string_coords, polb_str):
         #     print(kpt, phase)
 
+    elif method == "true_pt":
+        bps = []
+        for kx, ky in set(bz_2d_points):
+            print()
+            this_string = get_string(wfc, kx, ky)
+            bp = phase_string_true_pt(this_string)
+            bps.append(bp)
+            print(kx, "\t", ky, '\t\t', (2 * bp) / (2*np.pi))
+        polb = 2 * sum(bps) / (2 * np.pi * len(bps))
     else:
         bps = []
         for kx, ky in set(bz_2d_points):
@@ -446,32 +475,37 @@ if __name__ == '__main__':
 
     # bp0 = get_berry_phase_polarization(wfc0, method='verbose')
     # bp0 = get_berry_phase_polarization(wfc0)
-    # print("Electronic berry phase: {}".format(bp0))
+    bp0 = get_berry_phase_polarization(wfc0, method='true_pt')
+    print("Electronic berry phase: {}".format(bp0))
 
-    print("reading {}".format(sys.argv[2]))
-    wfc1 = read_wfc(sys.argv[2])
+    ## print("reading {}".format(sys.argv[2]))
+    ## wfc1 = read_wfc(sys.argv[2])
 
-    kpt_a0 = wfc0[0].get_occupied_only()
-    kpt_b0 = wfc1[0].get_occupied_only()
+    ## kpt_a0 = wfc0[0].get_occupied_only()
+    ## kpt_b0 = wfc0[36].get_occupied_only()
+    # kpt_b0 = wfc0[0].get_occupied_only().get_g_shifted([0, 0, 1])
 
-    overlap_ab0 = compute_overlap(kpt_a0, kpt_b0)
-    phase_ab0 = np.log(np.linalg.det(overlap_ab0)).imag
-    print("phase a-b at gamma = {}".format(phase_ab0))
-    u, s, v = np.linalg.svd(overlap_ab0)
-    pt_overlap_ab0 = np.dot(u, v)
-    pt_phase_ab0 = np.log(np.linalg.det(pt_overlap_ab0)).imag
-    print("cheap_pt phase a-b at gamma = {}".format(pt_phase_ab0))
+    ## print(kpt_a0.kcoords)
+    ## print(kpt_b0.kcoords)
 
-    kpt_b0_rot = get_kpoint2_aligned_with_kpoint1(kpt_a0, kpt_b0)
-    overlap_true_pt = compute_overlap(kpt_a0, kpt_b0)
-    phase_true_pt = np.log(np.linalg.det(overlap_true_pt)).imag
-    print("true_pt phase a-b at gamma = {}".format(phase_true_pt))
+    ## overlap_ab0 = compute_overlap(kpt_a0, kpt_b0)
+    ## phase_ab0 = np.log(np.linalg.det(overlap_ab0)).imag / np.pi
+    ## print("phase a-b = {}".format(phase_ab0))
+    ## u, s, v = np.linalg.svd(overlap_ab0)
+    ## pt_overlap_ab0 = np.dot(u, v)
+    ## pt_phase_ab0 = np.log(np.linalg.det(pt_overlap_ab0)).imag / np.pi
+    ## print("cheap_pt phase a-b = {}".format(pt_phase_ab0))
+
+    ## kpt_b0_rot = get_kpoint2_aligned_with_kpoint1(kpt_a0, kpt_b0)
+    ## overlap_true_pt = compute_overlap(kpt_a0, kpt_b0_rot)
+    ## phase_true_pt = np.log(np.linalg.det(overlap_true_pt)).imag / np.pi
+    ## print("true_pt phase a-b = {}".format(phase_true_pt))
 
 
-    # # find kpt indices along 0,0
-    # for i, k in enumerate(wfc0):
-    #     if k.kcoords[0] == 0 and k.kcoords[1] == 0:
-    #         print(i, k.kcoords)
+    ## # find kpt indices along 0,0
+    ## for i, k in enumerate(wfc0):
+    ##     if k.kcoords[0] == 0 and k.kcoords[1] == 0:
+    ##         print(i, k.kcoords)
     # print()
     # for i, k in enumerate(wfc1):
     #     if k.kcoords[0] == 0 and k.kcoords[1] == 0:
