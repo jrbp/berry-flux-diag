@@ -102,7 +102,7 @@ class Kpoint(MutableSequence):
     def get_g_shifted(self, g_shift):
         """returns a Kpoint object where gvecs at all eigenvs have been modified
         such that the returned Kpoint represents the Kpoint at self.kcoords + g_shift"""
-        return Kpoint(np.array(self.kcoords) + np.array(g_shift), self.weight, self.planewaves,
+        return Kpoint(tuple(np.array(self.kcoords) + np.array(g_shift)), self.weight, self.planewaves,
                       [EigenV(s.occupation,
                               np.array([np.array(g) - np.array(g_shift) for g in s.gvecs]),
                               s.evec)
