@@ -99,9 +99,19 @@ class Kpoint(MutableSequence):
         return Kpoint(self.kcoords, self.weight, self.planewaves,
                       [s for s in self.eigenvs if s.occupation > 0.9])
 
+    def get_g_shifted(self, g_shift):
+        """returns a Kpoint object where gvecs at all eigenvs have been modified
+        such that the returned Kpoint represents the Kpoint at self.kcoords + g_shift"""
+        return Kpoint(np.array(self.kcoords) + np.array(g_shift), self.weight, self.planewaves,
+                      [EigenV(s.occupation,
+                              np.array([np.array(g) - np.array(g_shift) for g in s.gvecs]),
+                              s.evec)
+                       for s in self.eigenvs])
+
 
 def sort_eigenv(eigenv, kcoord=[0., 0., 0.]):
-    "returns an EigenV object with components sorted by magnitude of the gvector+kcoord"
+    """returns an EigenV object with components sorted by magnitude of the gvector+kcoord
+    No longer needed since overlaps check g vector correspondence exactly"""
     gv_ev = list(zip(eigenv.gvecs, eigenv.evec))
     sorted_gv_ev = sorted(gv_ev,
                           key=(lambda x:
@@ -231,6 +241,11 @@ def bphase_along_string(kpt_string, cheap_pt=False):
                 overlap = compute_overlap(kpt_string[i].get_occupied_only(),
                                           kpt_string[0].get_occupied_only(),
                                           dg=np.array([0, 0, 1]))
+
+                # # slower, test of get_g_shifted method
+                # tokpt = kpt_string[0].get_g_shifted([0, 0, 1])
+                # overlap = compute_overlap(fromkpt.get_occupied_only(),
+                #                           tokpt.get_occupied_only())
             else:
                 fromkpt = kpt_string[i]
                 tokpt = kpt_string[i + 1]
@@ -300,6 +315,10 @@ def det_of_string(kpt_string):
             overlap = compute_overlap(kpt_string[i].get_occupied_only(),
                                       kpt_string[0].get_occupied_only(),
                                       dg=np.array([0, 0, 1]))
+
+            # # slower, test of get_g_shifted method
+            # overlap = compute_overlap(kpt_string[i].get_occupied_only(),
+            #                           kpt_string[0].get_g_shifted([0, 0, 1]).get_occupied_only())
             # set_of_overlaps += str(kpt_string[i].kcoords) + '-->' + str(kpt_string[0].kcoords) + '\n'
         else:
             overlap = compute_overlap(kpt_string[i].get_occupied_only(),
