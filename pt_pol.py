@@ -367,6 +367,8 @@ def get_berry_phase_polarization(wfc, method=None):
     nstr = len(set(bz_2d_points))
 
     if method is None or method == 'det_avg':
+        # nearly an exact copy of what abinit does
+        # can not see how phase evolves along string
         det_strings = []
         string_coords = []
         det_avg = 0
