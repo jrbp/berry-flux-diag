@@ -348,6 +348,7 @@ def phase_string_true_pt(kpt_string):
         from_kpt = to_kpt
     return tot_phase_change
 
+
 def get_string(wfc, kx, ky):
     result = []
     for kpt in wfc:
@@ -428,6 +429,7 @@ def get_kpoint2_aligned_with_kpoint1(kpoint1, kpoint2):
     """
     raw_overlap = compute_overlap(kpoint1, kpoint2)
     u, s, v = np.linalg.svd(raw_overlap)
+    print(s.min())
     rot_mat = np.linalg.inv(np.dot(u, v))
     new_eigenvs = np.zeros((len(kpoint2), len(kpoint2[0].evec), 2))
     for i in range(len(kpoint2)):
@@ -446,6 +448,13 @@ def get_kpoint2_aligned_with_kpoint1(kpoint1, kpoint2):
                      kpoint2.planewaves, eigenvs=new_eigenv_objects)
     return new_kpt
 
+
+def get_wfc2_aligned_with_wfc1(wfc1, wfc2):
+    """returns a list of Kpoints object corresponding to wfc2
+    with a unitary operation applied to each Kpoint such that bands
+    are maximally aligned with corresponding Kpoints in wfc1
+    kpoints must be in the same order"""
+    return [get_kpoint2_aligned_with_kpoint1(kp1, kp2) for kp1, kp2 in zip(wfc1, wfc2)]
 
 # def compute_phase_diff_along_string(wfc0, wfc1, kx, ky):
 #     tot_phase_change = 0.
@@ -473,13 +482,26 @@ if __name__ == '__main__':
     print("reading {}".format(sys.argv[1]))
     wfc0 = read_wfc(sys.argv[1])
 
+    print("reading {}".format(sys.argv[2]))
+    wfc1 = read_wfc(sys.argv[2])
+
+    string0 = [k.get_occupied_only() for k in get_string(wfc0, 0, 0)]
+    string1 = [k.get_occupied_only() for k in get_string(wfc1, 0, 0)]
+
+    string1_aligned = get_wfc2_aligned_with_wfc1(string0, string1)
+
+    bp_s0 = bphase_along_string(string0, cheap_pt=False) / np.pi
+    print("berry phase string0: {}".format(bp_s0))
+    bp_s1 = bphase_along_string(string1, cheap_pt=False) / np.pi
+    print("berry phase string1: {}".format(bp_s1))
+    bp_s1_aligned = bphase_along_string(string1_aligned, cheap_pt=False) / np.pi
+    print("berry phase string1_aligned: {}".format(bp_s1_aligned))
+
     # bp0 = get_berry_phase_polarization(wfc0, method='verbose')
     # bp0 = get_berry_phase_polarization(wfc0)
-    bp0 = get_berry_phase_polarization(wfc0, method='true_pt')
-    print("Electronic berry phase: {}".format(bp0))
+    # bp0 = get_berry_phase_polarization(wfc0, method='true_pt')
+    # print("Electronic berry phase: {}".format(bp0))
 
-    ## print("reading {}".format(sys.argv[2]))
-    ## wfc1 = read_wfc(sys.argv[2])
 
     ## kpt_a0 = wfc0[0].get_occupied_only()
     ## kpt_b0 = wfc0[36].get_occupied_only()
