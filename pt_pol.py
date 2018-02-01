@@ -360,6 +360,17 @@ def get_string(wfc, kx, ky):
     return result
 
 
+def get_string_indicies(wfc, kx, ky):
+    result = []
+    for i, kpt in enumerate(wfc):
+        in_this_string = ((abs(kpt.kcoords[0] - kx) < 1.e-5)
+                          and (abs(kpt.kcoords[1] - ky) < 1.e-5))
+        if in_this_string:
+            result.append((i, kpt))
+    result.sort(key=lambda k: k[1].kcoords[-1])
+    return [entry[0] for entry in result]
+
+
 def get_berry_phase_polarization(wfc, method=None):
     bz_2d_points = []
     for kpt in wfc:
@@ -414,10 +425,12 @@ def get_berry_phase_polarization(wfc, method=None):
         for kx, ky in set(bz_2d_points):
             print()
             this_string = get_string(wfc, kx, ky)
-            bp_s = bphase_along_string(this_string, cheap_pt=False)
-            bp = bphase_with_mult(this_string, cheap_pt=False)
+            # bp_s = bphase_along_string(this_string, cheap_pt=False)
+            # bp = bphase_with_mult(this_string, cheap_pt=False)
+            bp = bphase_along_string(this_string, cheap_pt=False)
             bps.append(bp)
-            print(kx, "\t", ky, '\t\t', (2 * bp) / (2*np.pi), (2 * bp_s) / (2*np.pi))
+            # print(kx, "\t", ky, '\t\t', (2 * bp) / (2*np.pi), (2 * bp_s) / (2*np.pi))
+            print(kx, "\t", ky, '\t\t', (2 * bp) / (2*np.pi))
         polb = 2 * sum(bps) / (2 * np.pi * len(bps))
     return polb
 
@@ -429,7 +442,8 @@ def get_kpoint2_aligned_with_kpoint1(kpoint1, kpoint2):
     """
     raw_overlap = compute_overlap(kpoint1, kpoint2)
     u, s, v = np.linalg.svd(raw_overlap)
-    print(s.min())
+    print("aligning: \n kpoint1: {} \n kpoint2: {} \n min singular value: {}".format(
+        kpoint1.kcoords, kpoint2.kcoords, s.min()))
     rot_mat = np.linalg.inv(np.dot(u, v))
     new_eigenvs = np.zeros((len(kpoint2), len(kpoint2[0].evec), 2))
     for i in range(len(kpoint2)):
@@ -456,24 +470,28 @@ def get_wfc2_aligned_with_wfc1(wfc1, wfc2):
     kpoints must be in the same order"""
     return [get_kpoint2_aligned_with_kpoint1(kp1, kp2) for kp1, kp2 in zip(wfc1, wfc2)]
 
-# def compute_phase_diff_along_string(wfc0, wfc1, kx, ky):
-#     tot_phase_change = 0.
-#     for kpt0, kpt1 in zip(wfc0, wfc1):
-#         print(kpt0.kcoords, kpt1.kcoords)
-#         part_of_string = (kpt0.kcoords[0] == kx
-#                           # and kpt0.kcoords[2] >= 0.
-#                           and kpt0.kcoords[1] == ky)
-#         if part_of_string:
-#             overlap = compute_overlap(kpt0.get_occupied_only(),
-#                                       kpt1.get_occupied_only())
-#             u, s, v = np.linalg.svd(overlap)
-#             unit_overlap = np.dot(u, v)
-#             phase_change = 2 * log(np.linalg.det(unit_overlap)).imag / (2 * np.pi)
-#             no_pt_phase_change = 2 * log(np.linalg.det(overlap)).imag / (2 * np.pi)
-#             print(kpt0.kcoords, np.linalg.det(unit_overlap), " ", phase_change)
-#             print(no_pt_phase_change)
-#             tot_phase_change += phase_change
-#     return tot_phase_change
+
+def construct_pt_gauge_along_kz(wfc):
+    smooth_wfc = [{}]*len(wfc)
+    bz_2d_points = []
+    for kpt in wfc:
+        bz_2d_points.append((kpt.kcoords[0], kpt.kcoords[1]))
+    for kx, ky in set(bz_2d_points):
+        print(kx, ky)
+        this_string_indicies = get_string_indicies(wfc, kx, ky)
+        first_point = True
+        for i in this_string_indicies:
+            this_kpt = wfc[i].get_occupied_only()
+            if first_point:
+                smooth_wfc[i] = this_kpt
+                last_point_ind = i
+                first_point = False
+            else:
+                this_kpt_aligned = get_kpoint2_aligned_with_kpoint1(
+                    smooth_wfc[last_point_ind], this_kpt)
+                smooth_wfc[i] = this_kpt_aligned
+                last_point_ind = i
+    return smooth_wfc
 
 
 if __name__ == '__main__':
@@ -485,17 +503,22 @@ if __name__ == '__main__':
     print("reading {}".format(sys.argv[2]))
     wfc1 = read_wfc(sys.argv[2])
 
-    string0 = [k.get_occupied_only() for k in get_string(wfc0, 0, 0)]
-    string1 = [k.get_occupied_only() for k in get_string(wfc1, 0, 0)]
+    wfc_occ0 = [k.get_occupied_only() for k in wfc0]
+    wfc_occ1 = [k.get_occupied_only() for k in wfc1]
 
-    string1_aligned = get_wfc2_aligned_with_wfc1(string0, string1)
+    wfc_occ0_smooth = construct_pt_gauge_along_kz(wfc_occ0)
 
-    bp_s0 = bphase_along_string(string0, cheap_pt=False) / np.pi
-    print("berry phase string0: {}".format(bp_s0))
-    bp_s1 = bphase_along_string(string1, cheap_pt=False) / np.pi
-    print("berry phase string1: {}".format(bp_s1))
-    bp_s1_aligned = bphase_along_string(string1_aligned, cheap_pt=False) / np.pi
-    print("berry phase string1_aligned: {}".format(bp_s1_aligned))
+    wfc_occ1_aligned = get_wfc2_aligned_with_wfc1(wfc_occ0_smooth, wfc_occ1)
+
+    bp0 = get_berry_phase_polarization(wfc_occ0_smooth, method='verbose')
+    print("berry phase wfc_occ0: {}".format(bp0))
+    # bp1 = get_berry_phase_polarization(wfc_occ1, method='verbose')
+    # print("berry phase wfc_occ1: {}".format(bp1))
+    bp1_aligned = get_berry_phase_polarization(wfc_occ1_aligned, method='verbose')
+    print("berry phase wfc_occ1_aligned: {}".format(bp1_aligned))
+
+    # print("bp1 - bp0 = {}".format(bp1 - bp0))
+    print("bp1_aligned - bp0 = {}".format(bp1_aligned - bp0))
 
     # bp0 = get_berry_phase_polarization(wfc0, method='verbose')
     # bp0 = get_berry_phase_polarization(wfc0)
