@@ -494,6 +494,64 @@ def construct_pt_gauge_along_kz(wfc):
     return smooth_wfc
 
 
+def get_indiv_band_bphases(kpoint1, kpoint2):
+    raw_overlap = compute_overlap(kpoint1, kpoint2)
+    u, s, v = np.linalg.svd(raw_overlap)
+    rot_mat = np.linalg.inv(np.dot(u, v))
+    rot_mat_eigenvals = np.linalg.eigvals(rot_mat)
+    return np.log(rot_mat_eigenvals).imag
+
+
+def testing_indiv_bphase_along_string(kpt_string, cheap_pt=False):
+    tot_phase_change = 0.
+    for i in range(len(kpt_string)):
+        fromkpt = kpt_string[i].get_occupied_only()
+        if i == len(kpt_string) - 1:
+            tokpt = kpt_string[0].get_g_shifted([0, 0, 1]).get_occupied_only()
+        else:
+            tokpt = kpt_string[i + 1].get_occupied_only()
+        overlap = compute_overlap(fromkpt, tokpt)
+        # s, lndet = np.linalg.slogdet(overlap)
+        # phase_change = log(s).imag
+        phase_change = np.log(np.linalg.det(overlap)).imag
+        print(fromkpt.kcoords, "->", tokpt.kcoords)
+        print('\t', 'phase change from raw_overlap: {}'.format(phase_change / np.pi))
+        u, s, v = np.linalg.svd(overlap)
+        rot_mat = np.linalg.inv(np.dot(u, v))
+        rot_mat_eigenvals_ph = np.imag(np.log(np.linalg.eigvals(rot_mat)))
+        print('\t', 'sum of new rot_mat eigenval phases: {}'.format(rot_mat_eigenvals_ph.sum() / np.pi))
+        print('\t', 'phase of det of rot_mat: {}'.format(np.log(np.linalg.det(rot_mat)).imag / np.pi))
+        print('\t', 'new rot_mat eigenval phases: {}'.format(rot_mat_eigenvals_ph / np.pi))
+        tot_phase_change += phase_change
+    return tot_phase_change
+
+def testing_indiv_get_kpoint2_aligned_with_kpoint1(kpoint1, kpoint2):
+    raw_overlap = compute_overlap(kpoint1, kpoint2)
+    u, s, v = np.linalg.svd(raw_overlap)
+    print("aligning: \n kpoint1: {} \n kpoint2: {} \n min singular value: {}".format(
+        kpoint1.kcoords, kpoint2.kcoords, s.min()))
+    rot_mat = np.linalg.inv(np.dot(u, v))
+    rot_mat_eigenvals_ph = np.imag(np.log(np.linalg.eigvals(rot_mat)))
+    print('\t', 'sum of new rot_mat eigenval phases: {}'.format(rot_mat_eigenvals_ph.sum() / np.pi))
+    print('\t', 'phase of det of rot_mat: {}'.format(np.log(np.linalg.det(rot_mat)).imag / np.pi))
+    print('\t', 'new rot_mat eigenval phases: {}'.format(rot_mat_eigenvals_ph / np.pi))
+    new_eigenvs = np.zeros((len(kpoint2), len(kpoint2[0].evec), 2))
+    for i in range(len(kpoint2)):
+        for j in range(len(kpoint2)):
+            # TODO: Should really just make EigenV store the complex number directly
+            new_eigenvs[i, :, 0] += (rot_mat[i, j].real * kpoint2[j].evec[:, 0]
+                                     - rot_mat[i, j].imag * kpoint2[j].evec[:, 1])
+            new_eigenvs[i, :, 1] += (rot_mat[i, j].real * kpoint2[j].evec[:, 1]
+                                     + rot_mat[i, j].imag * kpoint2[j].evec[:, 0])
+    # TODO: maybe change things so we don't need to put the old occupations here, really
+    #       this function should only be called with Kpoint objects where all bands
+    #       are occupied, if this isn't the case the occupations assigned below are nonsense
+    new_eigenv_objects = [EigenV(kpoint2[n].occupation, kpoint2[n].gvecs, ev)
+                          for n, ev in enumerate(new_eigenvs)]
+    new_kpt = Kpoint(kpoint2.kcoords, kpoint2.weight,
+                     kpoint2.planewaves, eigenvs=new_eigenv_objects)
+    return new_kpt
+
 if __name__ == '__main__':
     import sys
 
@@ -510,15 +568,47 @@ if __name__ == '__main__':
 
     wfc_occ1_aligned = get_wfc2_aligned_with_wfc1(wfc_occ0_smooth, wfc_occ1)
 
-    bp0 = get_berry_phase_polarization(wfc_occ0_smooth, method='verbose')
-    print("berry phase wfc_occ0: {}".format(bp0))
-    # bp1 = get_berry_phase_polarization(wfc_occ1, method='verbose')
-    # print("berry phase wfc_occ1: {}".format(bp1))
-    bp1_aligned = get_berry_phase_polarization(wfc_occ1_aligned, method='verbose')
-    print("berry phase wfc_occ1_aligned: {}".format(bp1_aligned))
+    wfc0_no_pt_s = get_string(wfc_occ0, -.3333, 0.)
+    wfc0_pt_s = get_string(wfc_occ0_smooth, -.3333, 0.)
+    wfc1_no_align = get_string(wfc_occ1, -.3333, 0.)
+    wfc1_aligned = get_string(wfc_occ1_aligned, -.3333, 0.)
 
-    # print("bp1 - bp0 = {}".format(bp1 - bp0))
-    print("bp1_aligned - bp0 = {}".format(bp1_aligned - bp0))
+    print('no pt wfc0')
+    testing_indiv_bphase_along_string(wfc0_no_pt_s)
+    print()
+    print('pt wfc0')
+    testing_indiv_bphase_along_string(wfc0_pt_s)
+    print()
+    print('aligned wfc1')
+    testing_indiv_bphase_along_string(wfc1_aligned)
+    print()
+
+
+    print('at {}'.format(wfc0_pt_s[0].kcoords))
+    testing_indiv_get_kpoint2_aligned_with_kpoint1(wfc0_pt_s[0], wfc1_no_align[0])
+    print('at {}'.format(wfc0_pt_s[1].kcoords))
+    testing_indiv_get_kpoint2_aligned_with_kpoint1(wfc0_pt_s[1], wfc1_no_align[1])
+    print('at {}'.format(wfc0_pt_s[2].kcoords))
+    testing_indiv_get_kpoint2_aligned_with_kpoint1(wfc0_pt_s[2], wfc1_no_align[2])
+
+
+
+    # BEGIN BLOCK OF COMPARING TOTAL BPHASES WITH ALIGNMENT
+    # bp0 = get_berry_phase_polarization(wfc_occ0_smooth, method='verbose')
+    # print("berry phase wfc_occ0: {}".format(bp0))
+    # # bp1 = get_berry_phase_polarization(wfc_occ1, method='verbose')
+    # # print("berry phase wfc_occ1: {}".format(bp1))
+    # bp1_aligned = get_berry_phase_polarization(wfc_occ1_aligned, method='verbose')
+    # print("berry phase wfc_occ1_aligned: {}".format(bp1_aligned))
+
+    # # print("bp1 - bp0 = {}".format(bp1 - bp0))
+    # print("bp1_aligned - bp0 = {}".format(bp1_aligned - bp0))
+
+
+    # END BLOCK OF COMPARING TOTAL BPHASES WITH ALIGNMENT
+
+
+
 
     # bp0 = get_berry_phase_polarization(wfc0, method='verbose')
     # bp0 = get_berry_phase_polarization(wfc0)
