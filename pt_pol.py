@@ -165,6 +165,18 @@ def read_wfc(wfc_file, return_first_k=False, sort_by_gvec_mag=False):
     return kpoints
 
 
+def compute_overlap_same_gvecs(evs0, evs1):
+    """
+    fast, but only works when sets of evs have exact same gvecs in the same order
+    """
+    overlap = np.zeros((len(evs0), len(evs0)), dtype=complex)
+    for m, ev0 in enumerate(evs0):
+        for n, ev1 in enumerate(evs1):
+            overlap[m, n] = np.vdot(ev0.get_evec_complex(),
+                                    ev1.get_evec_complex())
+    return overlap
+
+
 def compute_overlap(evs0, evs1, dg=np.array([0, 0, 0])):
     """
     Args: evs0, evs1: each a list of EigenV objects
@@ -173,13 +185,7 @@ def compute_overlap(evs0, evs1, dg=np.array([0, 0, 0])):
     overlap = np.zeros((len(evs0), len(evs0)), dtype=complex)
     for m, ev0 in enumerate(evs0):
         for n, ev1 in enumerate(evs1):
-            # below are old methods, they are quick, but assume each ev has the same gvecs in the same order
-
-            # overlap[m, n] = np.vdot(ev0.get_evec_complex(),
-            #                         ev1.get_evec_complex())
-            # min_gvecs = min([len(ev0.get_evec_complex()), len(ev1.get_evec_complex())])
-            # overlap[m, n] = np.vdot(ev0.get_evec_complex()[:min_gvecs],
-            #                         ev1.get_evec_complex()[:min_gvecs])
+            # # slow non jit way
             # this_element = 0.
             # for gvec0, ipw0 in zip(ev0.gvecs, np.conj(ev0.get_evec_complex())):
             #     for gvec1, ipw1 in zip(ev1.gvecs, ev1.get_evec_complex()):
@@ -202,7 +208,7 @@ def compute_overlap_element(gvs0, ev0_conj, gvs1, ev1, dg):
     return this_element
 
 
-def find_min_singular_value(wfc0, wfc1):
+def find_min_singular_value(wfc0, wfc1, same_gvecs=False):
     """
     Args: wfc0, wfc1: each a list of Kpoint objects
     Returns: The (value, coordinate) of the smallest of all singular values
@@ -212,8 +218,12 @@ def find_min_singular_value(wfc0, wfc1):
     """
     s_mins = np.zeros(len(wfc0))
     for i, kpt0, kpt1 in zip(count(), wfc0, wfc1):
-        overlap = compute_overlap(kpt0.get_occupied_only(),
-                                  kpt1.get_occupied_only())
+        if same_gvecs:
+            overlap = compute_overlap_same_gvecs(kpt0.get_occupied_only(),
+                                                 kpt1.get_occupied_only())
+        else:
+            overlap = compute_overlap(kpt0.get_occupied_only(),
+                                      kpt1.get_occupied_only())
         s = np.linalg.svd(overlap, compute_uv=False)
         s_mins[i] = s.min()
     return s_mins.min(), wfc0[s_mins.argmin()].kcoords
@@ -502,7 +512,7 @@ def get_indiv_band_bphases(kpoint1, kpoint2):
     return np.log(rot_mat_eigenvals).imag
 
 
-def testing_indiv_bphase_along_string(kpt_string, cheap_pt=False):
+def testing_indiv_bphase_along_string(kpt_string):
     tot_phase_change = 0.
     for i in range(len(kpt_string)):
         fromkpt = kpt_string[i].get_occupied_only()
