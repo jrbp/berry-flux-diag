@@ -507,9 +507,25 @@ def construct_pt_gauge_along_kz(wfc):
 def get_indiv_band_bphases(kpoint1, kpoint2):
     raw_overlap = compute_overlap(kpoint1, kpoint2)
     u, s, v = np.linalg.svd(raw_overlap)
-    rot_mat = np.linalg.inv(np.dot(u, v))
+    # rot_mat = np.linalg.inv(np.dot(u, v))
+    rot_mat = np.dot(u, v)
     rot_mat_eigenvals = np.linalg.eigvals(rot_mat)
     return np.log(rot_mat_eigenvals).imag
+
+
+def get_indiv_band_bphase_differences(wAkpt1, wAkpt2, wBkpt1, wBkpt2, nspin=1):
+    """
+    Computes individual band berry phases for state A from wAkpt1 to wAkpt2
+    then computes individual band berry phases for state B from wBkpt1 to wBkpt2
+    then returns an array of the smallest differences between corresponding indiv band phases
+    """
+    wA_phases = get_indiv_band_bphases(wAkpt1, wAkpt2)
+    wB_phases = get_indiv_band_bphases(wBkpt1, wBkpt2)
+    changes = (wB_phases - wA_phases)
+    print(wA_phases)
+    print(wB_phases)
+    min_changes = changes - (2 * np.pi) * np.round((changes / (2 * np.pi))).astype(int)
+    return min_changes
 
 
 def testing_indiv_bphase_along_string(kpt_string):
@@ -527,13 +543,15 @@ def testing_indiv_bphase_along_string(kpt_string):
         print(fromkpt.kcoords, "->", tokpt.kcoords)
         print('\t', 'phase change from raw_overlap: {}'.format(phase_change / np.pi))
         u, s, v = np.linalg.svd(overlap)
-        rot_mat = np.linalg.inv(np.dot(u, v))
+        # rot_mat = np.linalg.inv(np.dot(u, v))
+        rot_mat = np.dot(u, v)
         rot_mat_eigenvals_ph = np.imag(np.log(np.linalg.eigvals(rot_mat)))
         print('\t', 'sum of new rot_mat eigenval phases: {}'.format(rot_mat_eigenvals_ph.sum() / np.pi))
         print('\t', 'phase of det of rot_mat: {}'.format(np.log(np.linalg.det(rot_mat)).imag / np.pi))
         print('\t', 'new rot_mat eigenval phases: {}'.format(rot_mat_eigenvals_ph / np.pi))
         tot_phase_change += phase_change
     return tot_phase_change
+
 
 def testing_indiv_get_kpoint2_aligned_with_kpoint1(kpoint1, kpoint2):
     raw_overlap = compute_overlap(kpoint1, kpoint2)
@@ -578,32 +596,34 @@ if __name__ == '__main__':
 
     wfc_occ1_aligned = get_wfc2_aligned_with_wfc1(wfc_occ0_smooth, wfc_occ1)
 
-    wfc0_no_pt_s = get_string(wfc_occ0, -.3333, 0.)
+    # # wfc0_no_pt_s = get_string(wfc_occ0, -.3333, 0.)
     wfc0_pt_s = get_string(wfc_occ0_smooth, -.3333, 0.)
-    wfc1_no_align = get_string(wfc_occ1, -.3333, 0.)
+    # # wfc1_no_align = get_string(wfc_occ1, -.3333, 0.)
     wfc1_aligned = get_string(wfc_occ1_aligned, -.3333, 0.)
 
-    print('no pt wfc0')
-    testing_indiv_bphase_along_string(wfc0_no_pt_s)
-    print()
-    print('pt wfc0')
-    testing_indiv_bphase_along_string(wfc0_pt_s)
-    print()
-    print('aligned wfc1')
-    testing_indiv_bphase_along_string(wfc1_aligned)
-    print()
+    phase_changes = get_indiv_band_bphase_differences(wfc0_pt_s[0], wfc0_pt_s[1],
+                                                      wfc1_aligned[0], wfc1_aligned[1])
+    print(phase_changes / np.pi)
+    print(sum(phase_changes) / np.pi)
 
+    # # print('no pt wfc0')
+    # # testing_indiv_bphase_along_string(wfc0_no_pt_s)
+    # # print()
+    # # print('pt wfc0')
+    # testing_indiv_bphase_along_string(wfc0_pt_s)
+    # # print()
+    # # print('aligned wfc1')
+    # # testing_indiv_bphase_along_string(wfc1_aligned)
+    # # print()
 
-    print('at {}'.format(wfc0_pt_s[0].kcoords))
-    testing_indiv_get_kpoint2_aligned_with_kpoint1(wfc0_pt_s[0], wfc1_no_align[0])
-    print('at {}'.format(wfc0_pt_s[1].kcoords))
-    testing_indiv_get_kpoint2_aligned_with_kpoint1(wfc0_pt_s[1], wfc1_no_align[1])
-    print('at {}'.format(wfc0_pt_s[2].kcoords))
-    testing_indiv_get_kpoint2_aligned_with_kpoint1(wfc0_pt_s[2], wfc1_no_align[2])
+    # # print('at {}'.format(wfc0_pt_s[0].kcoords))
+    # # testing_indiv_get_kpoint2_aligned_with_kpoint1(wfc0_pt_s[0], wfc1_no_align[0])
+    # # print('at {}'.format(wfc0_pt_s[1].kcoords))
+    # # testing_indiv_get_kpoint2_aligned_with_kpoint1(wfc0_pt_s[1], wfc1_no_align[1])
+    # # print('at {}'.format(wfc0_pt_s[2].kcoords))
+    # # testing_indiv_get_kpoint2_aligned_with_kpoint1(wfc0_pt_s[2], wfc1_no_align[2])
 
-
-
-    # BEGIN BLOCK OF COMPARING TOTAL BPHASES WITH ALIGNMENT
+    # # BEGIN BLOCK OF COMPARING TOTAL BPHASES WITH ALIGNMENT
     # bp0 = get_berry_phase_polarization(wfc_occ0_smooth, method='verbose')
     # print("berry phase wfc_occ0: {}".format(bp0))
     # # bp1 = get_berry_phase_polarization(wfc_occ1, method='verbose')
@@ -614,17 +634,12 @@ if __name__ == '__main__':
     # # print("bp1 - bp0 = {}".format(bp1 - bp0))
     # print("bp1_aligned - bp0 = {}".format(bp1_aligned - bp0))
 
-
-    # END BLOCK OF COMPARING TOTAL BPHASES WITH ALIGNMENT
-
-
-
+    # # END BLOCK OF COMPARING TOTAL BPHASES WITH ALIGNMENT
 
     # bp0 = get_berry_phase_polarization(wfc0, method='verbose')
     # bp0 = get_berry_phase_polarization(wfc0)
     # bp0 = get_berry_phase_polarization(wfc0, method='true_pt')
     # print("Electronic berry phase: {}".format(bp0))
-
 
     ## kpt_a0 = wfc0[0].get_occupied_only()
     ## kpt_b0 = wfc0[36].get_occupied_only()
