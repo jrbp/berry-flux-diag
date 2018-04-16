@@ -504,13 +504,17 @@ def construct_pt_gauge_along_kz(wfc):
     return smooth_wfc
 
 
-def get_indiv_band_bphases(kpoint1, kpoint2):
+def get_indiv_band_bphases(kpoint1, kpoint2, returnEigVecs=False):
     raw_overlap = compute_overlap(kpoint1, kpoint2)
     u, s, v = np.linalg.svd(raw_overlap)
     # rot_mat = np.linalg.inv(np.dot(u, v))
     rot_mat = np.dot(u, v)
     rot_mat_eigenvals = np.linalg.eigvals(rot_mat)
-    return np.log(rot_mat_eigenvals).imag
+    if returnEigVecs:
+        eigvecs = np.linalg.eig(rot_mat)[1]
+        return np.log(rot_mat_eigenvals).imag, eigvecs
+    else:
+        return np.log(rot_mat_eigenvals).imag
 
 
 def get_indiv_band_bphase_differences(wAkpt1, wAkpt2, wBkpt1, wBkpt2, nspin=1):
@@ -518,14 +522,83 @@ def get_indiv_band_bphase_differences(wAkpt1, wAkpt2, wBkpt1, wBkpt2, nspin=1):
     Computes individual band berry phases for state A from wAkpt1 to wAkpt2
     then computes individual band berry phases for state B from wBkpt1 to wBkpt2
     then returns an array of the smallest differences between corresponding indiv band phases
+    THIS IS NONSENSE SINCE INDIV BAND BPHASES ARE IN ARBITRARY ORDER
     """
     wA_phases = get_indiv_band_bphases(wAkpt1, wAkpt2)
     wB_phases = get_indiv_band_bphases(wBkpt1, wBkpt2)
+
+    #  testing, looking at overlap of eigenvecs
+    #print("getting phases for A")
+    #wA_phases, wA_vecs = get_indiv_band_bphases(wAkpt1, wAkpt2, returnEigVecs=True)
+    #print("getting phases for B")
+    #wB_phases, wB_vecs = get_indiv_band_bphases(wBkpt1, wBkpt2, returnEigVecs=True)
+    #overlap = np.zeros((len(wA_vecs), len(wA_vecs)), dtype=complex)
+    #for m, ev0 in enumerate(wA_vecs):
+    #    for n, ev1 in enumerate(wB_vecs):
+    #        overlap[m, n] = np.vdot(ev0, ev1) * np.conj(np.vdot(ev0, ev1))
+    #print(overlap)
+
     changes = (wB_phases - wA_phases)
-    print(wA_phases)
-    print(wB_phases)
+    print('A phases')
+    print(wA_phases / np.pi)
+    print('A sum = {}'.format(sum(wA_phases) / np.pi))
+    print('B phases')
+    print(wB_phases / np.pi)
+    print('B sum = {}'.format(sum(wB_phases) / np.pi))
     min_changes = changes - (2 * np.pi) * np.round((changes / (2 * np.pi))).astype(int)
     return min_changes
+
+
+def get_phase_difference_from_strings(kpt_string1, kpt_string2):
+    """
+    Given two kpoint strings compute differences in individual band berry phases for each
+    pair of kpts in a string
+
+    Should only be useful if kpt_string2 is aligned with kpt_string1
+    (same set of kpts and appropriate gauge choice)
+    not currently enforcing any of this for testing purposes, use with caution
+    """
+    tot_phase_difference = 0.
+    for i in range(len(kpt_string1)):
+        if i == len(kpt_string1) - 1:
+            fromkptA = kpt_string1[i]
+            fromkptB = kpt_string2[i]
+            tokptA = kpt_string1[0].get_g_shifted([0, 0, 1])
+            tokptB = kpt_string2[0].get_g_shifted([0, 0, 1])
+        else:
+            fromkptA = kpt_string1[i]
+            fromkptB = kpt_string2[i]
+            tokptA = kpt_string1[i+1]
+            tokptB = kpt_string2[i+1]
+        print("{} -> {}".format(fromkptA.kcoords, tokptA.kcoords))
+        phase_differences = get_indiv_band_bphase_differences(fromkptA, tokptA,
+                                                              fromkptB, tokptB)
+        print('B - A')
+        print(phase_differences / np.pi)
+        tot_phase_difference += sum(phase_differences)
+        print('sum for this {} -> {}'.format(fromkptA.kcoords, tokptA.kcoords))
+        print(sum(phase_differences) / np.pi)
+    return tot_phase_difference
+
+
+def get_phase_difference_from_wfcs(wfc1, wfc2):
+    bz_2d_points = []
+    for kpt in wfc1:
+        bz_2d_points.append((kpt.kcoords[0], kpt.kcoords[1]))
+
+    bz_2d_set = set(bz_2d_points)
+    phase_diffs = []
+    for kx, ky in bz_2d_set:
+        string1 = get_string(wfc1, kx, ky)
+        string2 = get_string(wfc2, kx, ky)
+        this_ph_diff = get_phase_difference_from_strings(string1, string2)
+        phase_diffs.append(this_ph_diff)
+        print()
+        print(kx, "\t", ky, '\t\t')
+        print("\t", (2 * this_ph_diff) / (2*np.pi))
+        print()
+    avg_phase_diff = 2 * sum(phase_diffs) / (2 * np.pi * len(phase_diffs))
+    return avg_phase_diff
 
 
 def testing_indiv_bphase_along_string(kpt_string):
@@ -580,6 +653,7 @@ def testing_indiv_get_kpoint2_aligned_with_kpoint1(kpoint1, kpoint2):
                      kpoint2.planewaves, eigenvs=new_eigenv_objects)
     return new_kpt
 
+
 if __name__ == '__main__':
     import sys
 
@@ -592,19 +666,21 @@ if __name__ == '__main__':
     wfc_occ0 = [k.get_occupied_only() for k in wfc0]
     wfc_occ1 = [k.get_occupied_only() for k in wfc1]
 
-    wfc_occ0_smooth = construct_pt_gauge_along_kz(wfc_occ0)
+    # wfc_occ0_smooth = construct_pt_gauge_along_kz(wfc_occ0)
 
-    wfc_occ1_aligned = get_wfc2_aligned_with_wfc1(wfc_occ0_smooth, wfc_occ1)
+    # wfc_occ1_aligned = get_wfc2_aligned_with_wfc1(wfc_occ0_smooth, wfc_occ1)
+    wfc_occ1_aligned = get_wfc2_aligned_with_wfc1(wfc_occ0, wfc_occ1)
 
-    # # wfc0_no_pt_s = get_string(wfc_occ0, -.3333, 0.)
-    wfc0_pt_s = get_string(wfc_occ0_smooth, -.3333, 0.)
+    # wfc0_no_pt_s = get_string(wfc_occ0, -.3333, 0.)
+    # wfc0_pt_s = get_string(wfc_occ0_smooth, -.3333, 0.)
     # # wfc1_no_align = get_string(wfc_occ1, -.3333, 0.)
-    wfc1_aligned = get_string(wfc_occ1_aligned, -.3333, 0.)
+    # wfc1_aligned = get_string(wfc_occ1_aligned, -.3333, 0.)
 
-    phase_changes = get_indiv_band_bphase_differences(wfc0_pt_s[0], wfc0_pt_s[1],
-                                                      wfc1_aligned[0], wfc1_aligned[1])
-    print(phase_changes / np.pi)
-    print(sum(phase_changes) / np.pi)
+    # phase_changes = get_indiv_band_bphase_differences(wfc0_pt_s[0], wfc0_pt_s[1],
+    #                                                   wfc1_aligned[0], wfc1_aligned[1])
+    # phase_change = get_phase_difference_from_strings(wfc0_no_pt_s, wfc1_aligned)
+    phase_change = get_phase_difference_from_wfcs(wfc_occ0, wfc_occ1_aligned)
+    print(phase_change / np.pi)
 
     # # print('no pt wfc0')
     # # testing_indiv_bphase_along_string(wfc0_no_pt_s)
