@@ -422,45 +422,11 @@ if __name__ == '__main__':
     logger.info("reading {}".format(sys.argv[1]))
     wfc0 = read_wfc(sys.argv[1])
 
-    # try localizing wfc0 first
-    # wfc_occ0 = [k.get_occupied_only() for k in wfc0]
-    # wfc_occ0_smooth = construct_pt_gauge_along_kz(wfc_occ0)
-    # wfc0 = wfc_occ0_smooth
-    # end localizing wfc0
-
     logger.info("reading {}".format(sys.argv[2]))
     wfc1 = read_wfc(sys.argv[2])
-    # wfc1 = get_wfc2_aligned_with_wfc1(wfc0, read_wfc(sys.argv[2]))
 
     bz_2d_set = sorted(set([(kpt.kcoords[0], kpt.kcoords[1]) for kpt in wfc0]))
-    # print(bz_2d_set)
 
-    # begin test of all small loops
-    # string_sum = 0.
-    # string_vals = []
-    # for kx, ky in bz_2d_set:
-    #     print("strings along {}, {}:".format(kx, ky))
-    #     loops = strings_to_loops(get_string(wfc0, kx, ky),
-    #                              get_string(wfc1, kx, ky))
-    #     inner_loop_sum = 0.
-    #     for loop in loops:
-    #         pt_loop = align_bands_along_path(loop)
-    #         wlevs_loop = get_indiv_band_bphases(pt_loop[-1], pt_loop[0])
-    #         print(wlevs_loop)
-    #         print()
-    #         inner_loop_sum += sum(wlevs_loop) / np.pi
-    #     print(inner_loop_sum)
-    #     string_vals.append(inner_loop_sum)
-    #     string_sum += inner_loop_sum
-    # print()
-    # print("summary")
-    # for k, val in zip(bz_2d_set, string_vals):
-    #     print("{}: {}".format(k, val))
-    # print("average across strings:")
-    # print(string_sum / len(bz_2d_set))
-    # end test of all small loops
-
-    # begin test of all small loops, but using eqn 3.119 instead of constructing pt gauge explicitly
     string_vals = []
     import time
     start_time = time.time()
@@ -480,42 +446,3 @@ if __name__ == '__main__':
     for k, val in zip(bz_2d_set, string_vals):
         logger.info("{}: {}".format(k, val))
     logger.info("average across strings: {}".format(string_sum / len(bz_2d_set)))
-    # end test of all small loops
-
-    # begin test of all large loops (across all of kz)
-    # string_vals = []
-    # loop_sums = 0.
-    # for kx, ky in bz_2d_set:
-    #     print("strings along {}, {}:".format(kx, ky))
-    #     loop = strings_to_single_loop(get_string(wfc0, kx, ky),
-    #                                   get_string(wfc1, kx, ky))
-    #     pt_loop = align_bands_along_path(loop)
-    #     wlevs_loop = get_indiv_band_bphases(pt_loop[-1], pt_loop[0])
-    #     print(wlevs_loop)
-    #     print()
-    #     loop_sums += sum(wlevs_loop) / np.pi
-    #     string_vals.append(sum(wlevs_loop) / np.pi)
-    # for k, val in zip(bz_2d_set, string_vals):
-    #     print("{}: {}".format(k, val))
-    # print("average across strings:")
-    # print(loop_sums / len(bz_2d_set))
-    # end test of all large loops (across all of kz)
-
-    # begin test of one little loop
-    # wfc0_strings = [get_string(wfc0, *k_2d) for k_2d in bz_2d_set]
-    # wfc1_strings = [get_string(wfc1, *k_2d) for k_2d in bz_2d_set]
-    # loops0 = strings_to_loops(wfc0_strings[0], wfc1_strings[0])
-    # print([[kpt.kcoords for kpt in loop] for loop in loops0])
-    # loop0 = loops0[0]
-    # end test of one little loop
-
-    # begin test of one large loop (across all of kz)
-    # loop0 = strings_to_single_loop(wfc0_strings[4], wfc1_strings[4])
-    # for kpt in loop0:
-    #     print(kpt.kcoords)
-    # print()
-    # pt_loop0 = align_bands_along_path(loop0)
-    # wlevs_loop0 = get_indiv_band_bphases(pt_loop0[-1], pt_loop0[0])
-    # print(wlevs_loop0)
-    # print(sum(wlevs_loop0) / np.pi)
-    # end test of one large loop (across all of kz)
