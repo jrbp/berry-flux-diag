@@ -189,17 +189,33 @@ def compute_overlap(evs0, evs1, dg=np.array([0, 0, 0])):
     Args: evs0, evs1: each a list of EigenV objects
     Returns: overlap matrix overlap[m,n] = <evs0_m | evs1_n>
     """
+    evs0_arr = np.array([ev0.get_evec_complex() for ev0 in evs0])
+    evs1_arr = np.array([ev1.get_evec_complex() for ev1 in evs1])
+    evs0_gs = np.array([ev0.gvecs for ev0 in evs0])
+    evs1_gs = np.array([ev1.gvecs for ev1 in evs1])
     overlap = np.zeros((len(evs0), len(evs0)), dtype=complex)
-    for m, ev0 in enumerate(evs0):
-        for n, ev1 in enumerate(evs1):
-            # # slow non jit way
-            # this_element = 0.
-            # for gvec0, ipw0 in zip(ev0.gvecs, np.conj(ev0.get_evec_complex())):
-            #     for gvec1, ipw1 in zip(ev1.gvecs, ev1.get_evec_complex()):
-            #         if all(gvec0 == gvec1):
-            #             this_element += ipw0 * ipw1
-            overlap[m, n] = compute_overlap_element(ev0.gvecs, np.conj(ev0.get_evec_complex()),
-                                                    ev1.gvecs, ev1.get_evec_complex(), dg)
+    return compute_overlap_jit(overlap, evs0_arr, evs1_arr, evs0_gs, evs1_gs, dg)
+    # overlap = np.zeros((len(evs0), len(evs0)), dtype=complex)
+    # for m, ev0 in enumerate(evs0):
+    #     for n, ev1 in enumerate(evs1):
+    #         # # slow non jit way
+    #         # this_element = 0.
+    #         # for gvec0, ipw0 in zip(ev0.gvecs, np.conj(ev0.get_evec_complex())):
+    #         #     for gvec1, ipw1 in zip(ev1.gvecs, ev1.get_evec_complex()):
+    #         #         if all(gvec0 == gvec1):
+    #         #             this_element += ipw0 * ipw1
+    #         overlap[m, n] = compute_overlap_element(ev0.gvecs, np.conj(ev0.get_evec_complex()),
+    #                                                 ev1.gvecs, ev1.get_evec_complex(), dg)
+    # return overlap
+
+
+@jit(nopython=True, cache=True)
+def compute_overlap_jit(overlap, evs0, evs1, evs0_gs, evs1_gs, dg=np.array([0., 0., 0.])):
+    for m in range(len(evs0)):
+        for n in range(len(evs1)):
+            overlap[m, n] = compute_overlap_element(evs0_gs[m], np.conj(evs0[m]),
+                                                    evs1_gs[n], evs1[n],
+                                                    dg)
     return overlap
 
 
@@ -393,14 +409,14 @@ def pt_phase_from_strings(bz_2d_pt, wfc0, wfc1):
     logger.info("strings along {}, {}:".format(kx, ky))
     loops = strings_to_loops(get_string(wfc0, kx, ky),
                              get_string(wfc1, kx, ky))
-    inner_loop_sum = 0.
-    for loop in loops:
-        inner_loop_sum += pt_phase_from_loop(loop) / np.pi
-    # loop_pool = Pool(4)
-    # inner_loop_vals = loop_pool.map(pt_phase_from_loop, loops)
-    # loop_pool.close()
-    # loop_pool.join()
-    # inner_loop_sum = sum(inner_loop_vals) / np.pi
+    # inner_loop_sum = 0.
+    # for loop in loops:
+    #     inner_loop_sum += pt_phase_from_loop(loop) / np.pi
+    loop_pool = Pool(4)
+    inner_loop_vals = loop_pool.map(pt_phase_from_loop, loops)
+    loop_pool.close()
+    loop_pool.join()
+    inner_loop_sum = sum(inner_loop_vals) / np.pi
     logger.debug('this strings change in phase: {}'.format(inner_loop_sum))
     return inner_loop_sum
 
@@ -430,16 +446,16 @@ if __name__ == '__main__':
     string_vals = []
     import time
     start_time = time.time()
-    # for kx, ky in bz_2d_set:
-    #     inner_loop_sum = pt_phase_from_strings((kx, ky), wfc0, wfc1)
-    #     string_vals.append(inner_loop_sum)
-    string_pool = Pool(4)
-    string_vals = string_pool.starmap(pt_phase_from_strings,
-                                      zip(bz_2d_set,
-                                          itertools.repeat(wfc0),
-                                          itertools.repeat(wfc1)))
-    string_pool.close()
-    string_pool.join()
+    for kx, ky in bz_2d_set:
+        inner_loop_sum = pt_phase_from_strings((kx, ky), wfc0, wfc1)
+        string_vals.append(inner_loop_sum)
+    # string_pool = Pool(4)
+    # string_vals = string_pool.starmap(pt_phase_from_strings,
+    #                                   zip(bz_2d_set,
+    #                                       itertools.repeat(wfc0),
+    #                                       itertools.repeat(wfc1)))
+    # string_pool.close()
+    # string_pool.join()
     string_sum = sum(string_vals)
     logger.debug("time info: {} seconds".format(time.time() - start_time))
     logger.info("summary")
