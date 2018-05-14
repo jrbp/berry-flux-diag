@@ -102,7 +102,8 @@ class Kpoint(MutableSequence):
     def get_g_shifted(self, g_shift):
         """returns a Kpoint object where gvecs at all eigenvs have been modified
         such that the returned Kpoint represents the Kpoint at self.kcoords + g_shift"""
-        return Kpoint(tuple(np.array(self.kcoords) + np.array(g_shift)), self.weight, self.planewaves,
+        return Kpoint(tuple(np.array(self.kcoords) + np.array(g_shift)),
+                      self.weight, self.planewaves,
                       [EigenV(s.occupation,
                               np.array([np.array(g) - np.array(g_shift) for g in s.gvecs]),
                               s.evec)
@@ -137,7 +138,8 @@ def read_wfc(wfc_file, return_first_k=False, sort_by_gvec_mag=False):
                 kx, ky, kz, occ) = [float(x) for x in line.split()]
             # IMPORTANT:  below change planewaves between the following two lines
             #             if using the fft to make same number of planewaves at each kpt
-            #             this is due to how the modified cut3d is writing wfcs, and should be changed there
+            #             this is due to how the modified cut3d is writing wfcs
+            #             this should be changed there
             planewaves = int(max_planewaves)  # if fft used
             # planewaves = int(pws_in_calc)   # if fft not used
             try:
@@ -246,6 +248,14 @@ def get_kpoint2_aligned_with_kpoint1(kpoint1, kpoint2):
     return new_kpt
 
 
+def strings_to_single_loop(string1, string2):
+    loop = [string1[0]] + string2
+    loop.append(string2[0].get_g_shifted([0, 0, 1]))
+    loop.append(string1[0].get_g_shifted([0, 0, 1]))
+    loop += string1[:0:-1]
+    return loop
+
+
 def strings_to_loops(string1, string2):
     # IMPORTANT: currently hard coded for strings along kz
     # may want to add check that string1 and string2 are same length
@@ -281,12 +291,29 @@ def align_bands_along_path(kpt_path):
     return smooth_path
 
 
+def get_overlaps_along_path(kpt_path):
+    nkpts = len(kpt_path)
+    overlaps = []
+    pairs_of_ks = []
+    for i in range(nkpts):
+        this_kpt = kpt_path[i].get_occupied_only()
+        if i == nkpts - 1:
+            next_kpt = kpt_path[0].get_occupied_only()
+        else:
+            next_kpt = kpt_path[i+1].get_occupied_only()
+        pairs_of_ks.append((this_kpt.kcoords, next_kpt.kcoords))
+        raw_overlap = compute_overlap(this_kpt, next_kpt)
+        overlaps.append(raw_overlap)
+    return overlaps, pairs_of_ks
+
+
 def get_indiv_band_bphases(kpoint1, kpoint2, returnEigVecs=False):
     raw_overlap = compute_overlap(kpoint1, kpoint2)
     u, s, v = np.linalg.svd(raw_overlap)
     # rot_mat = np.linalg.inv(np.dot(u, v))
     rot_mat = np.dot(u, v)
     rot_mat_eigenvals = np.linalg.eigvals(rot_mat)
+    print("min sing val from indiv bphase step = {}".format(min(s)))
     return np.log(rot_mat_eigenvals).imag
 
 
@@ -300,30 +327,153 @@ def get_wfc2_aligned_with_wfc1(wfc1, wfc2):
             for kp1, kp2 in zip(wfc1, wfc2)]
 
 
+def construct_pt_gauge_along_kz(wfc):
+    smooth_wfc = [{}]*len(wfc)
+    bz_2d_points = []
+    for kpt in wfc:
+        bz_2d_points.append((kpt.kcoords[0], kpt.kcoords[1]))
+    for kx, ky in set(bz_2d_points):
+        print(kx, ky)
+        this_string_indicies = get_string_indicies(wfc, kx, ky)
+        first_point = True
+        for i in this_string_indicies:
+            this_kpt = wfc[i].get_occupied_only()
+            if first_point:
+                smooth_wfc[i] = this_kpt
+                last_point_ind = i
+                first_point = False
+            else:
+                this_kpt_aligned = get_kpoint2_aligned_with_kpoint1(
+                    smooth_wfc[last_point_ind], this_kpt)
+                smooth_wfc[i] = this_kpt_aligned
+                last_point_ind = i
+    return smooth_wfc
+
+
+def get_string_indicies(wfc, kx, ky):
+    result = []
+    for i, kpt in enumerate(wfc):
+        in_this_string = ((abs(kpt.kcoords[0] - kx) < 1.e-5)
+                          and (abs(kpt.kcoords[1] - ky) < 1.e-5))
+        if in_this_string:
+            result.append((i, kpt))
+    result.sort(key=lambda k: k[1].kcoords[-1])
+    return [entry[0] for entry in result]
+
+
 if __name__ == '__main__':
     import sys
 
     print("reading {}".format(sys.argv[1]))
     wfc0 = read_wfc(sys.argv[1])
 
+    # try localizing wfc0 first
+    # wfc_occ0 = [k.get_occupied_only() for k in wfc0]
+    # wfc_occ0_smooth = construct_pt_gauge_along_kz(wfc_occ0)
+    # wfc0 = wfc_occ0_smooth
+    # end localizing wfc0
+
     print("reading {}".format(sys.argv[2]))
-    # wfc1 = read_wfc(sys.argv[2])
-    wfc1 = get_wfc2_aligned_with_wfc1(wfc0, read_wfc(sys.argv[2]))
+    wfc1 = read_wfc(sys.argv[2])
+    # wfc1 = get_wfc2_aligned_with_wfc1(wfc0, read_wfc(sys.argv[2]))
 
-    bz_2d_set = set([(kpt.kcoords[0], kpt.kcoords[1]) for kpt in wfc0])
+    bz_2d_set = sorted(set([(kpt.kcoords[0], kpt.kcoords[1]) for kpt in wfc0]))
+    # print(bz_2d_set)
 
-    wfc0_strings = [get_string(wfc0, *k_2d) for k_2d in bz_2d_set]
-    wfc1_strings = [get_string(wfc1, *k_2d) for k_2d in bz_2d_set]
+    # begin test of all small loops
+    # string_sum = 0.
+    # string_vals = []
+    # for kx, ky in bz_2d_set:
+    #     print("strings along {}, {}:".format(kx, ky))
+    #     loops = strings_to_loops(get_string(wfc0, kx, ky),
+    #                              get_string(wfc1, kx, ky))
+    #     inner_loop_sum = 0.
+    #     for loop in loops:
+    #         pt_loop = align_bands_along_path(loop)
+    #         wlevs_loop = get_indiv_band_bphases(pt_loop[-1], pt_loop[0])
+    #         print(wlevs_loop)
+    #         print()
+    #         inner_loop_sum += sum(wlevs_loop) / np.pi
+    #     print(inner_loop_sum)
+    #     string_vals.append(inner_loop_sum)
+    #     string_sum += inner_loop_sum
+    # print()
+    # print("summary")
+    # for k, val in zip(bz_2d_set, string_vals):
+    #     print("{}: {}".format(k, val))
+    # print("average across strings:")
+    # print(string_sum / len(bz_2d_set))
+    # end test of all small loops
 
-    # testing on one pair of strings for now
-    loops0 = strings_to_loops(wfc0_strings[0], wfc1_strings[0])
-    print([[kpt.kcoords for kpt in loop] for loop in loops0])
+    # begin test of all small loops, but using eqn 3.119 instead of constructing pt gauge explicitly
+    string_sum = 0.
+    string_vals = []
+    for kx, ky in bz_2d_set:
+        print("strings along {}, {}:".format(kx, ky))
+        loops = strings_to_loops(get_string(wfc0, kx, ky),
+                                 get_string(wfc1, kx, ky))
+        inner_loop_sum = 0.
+        for loop in loops:
+            overlaps, kpt_pairs = get_overlaps_along_path(loop)
+            curly_U = np.identity(len(overlaps[0][0]))
+            for M, kpt_p in zip(overlaps, kpt_pairs):
+                u, s, v = np.linalg.svd(M)
+                print("finding curly M: \n",
+                      " kpoint1: {} \n",
+                      " kpoint2: {} \n",
+                      " min singular value: {}".format(
+                          kpt_p[0], kpt_p[1], min(s)))
+                curly_M = np.dot(u, v)
+                curly_U = np.dot(curly_U, curly_M)
+            wlevs_loop = np.log(np.linalg.eigvals(curly_U)).imag
+            print(wlevs_loop)
+            print()
+            inner_loop_sum += sum(wlevs_loop) / np.pi
+        print(inner_loop_sum)
+        string_vals.append(inner_loop_sum)
+        string_sum += inner_loop_sum
     print()
+    print("summary")
+    for k, val in zip(bz_2d_set, string_vals):
+        print("{}: {}".format(k, val))
+    print("average across strings:")
+    print(string_sum / len(bz_2d_set))
+    # end test of all small loops
 
-    loop0 = loops0[0]
-    print(loop0)
+    # begin test of all large loops (across all of kz)
+    # string_vals = []
+    # loop_sums = 0.
+    # for kx, ky in bz_2d_set:
+    #     print("strings along {}, {}:".format(kx, ky))
+    #     loop = strings_to_single_loop(get_string(wfc0, kx, ky),
+    #                                   get_string(wfc1, kx, ky))
+    #     pt_loop = align_bands_along_path(loop)
+    #     wlevs_loop = get_indiv_band_bphases(pt_loop[-1], pt_loop[0])
+    #     print(wlevs_loop)
+    #     print()
+    #     loop_sums += sum(wlevs_loop) / np.pi
+    #     string_vals.append(sum(wlevs_loop) / np.pi)
+    # for k, val in zip(bz_2d_set, string_vals):
+    #     print("{}: {}".format(k, val))
+    # print("average across strings:")
+    # print(loop_sums / len(bz_2d_set))
+    # end test of all large loops (across all of kz)
 
-    pt_loop0 = align_bands_along_path(loop0)
+    # begin test of one little loop
+    # wfc0_strings = [get_string(wfc0, *k_2d) for k_2d in bz_2d_set]
+    # wfc1_strings = [get_string(wfc1, *k_2d) for k_2d in bz_2d_set]
+    # loops0 = strings_to_loops(wfc0_strings[0], wfc1_strings[0])
+    # print([[kpt.kcoords for kpt in loop] for loop in loops0])
+    # loop0 = loops0[0]
+    # end test of one little loop
 
-    wlevs_loop0 = get_indiv_band_bphases(pt_loop0[0], pt_loop0[-1])
-    print(wlevs_loop0)
+    # begin test of one large loop (across all of kz)
+    # loop0 = strings_to_single_loop(wfc0_strings[4], wfc1_strings[4])
+    # for kpt in loop0:
+    #     print(kpt.kcoords)
+    # print()
+    # pt_loop0 = align_bands_along_path(loop0)
+    # wlevs_loop0 = get_indiv_band_bphases(pt_loop0[-1], pt_loop0[0])
+    # print(wlevs_loop0)
+    # print(sum(wlevs_loop0) / np.pi)
+    # end test of one large loop (across all of kz)
