@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 from collections import MutableSequence
+import logging
 # from itertools import count
 # from cmath import log
 import numpy as np
 from numba import jit
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 class EigenV():
     """
@@ -144,8 +147,8 @@ def read_wfc(wfc_file, return_first_k=False, sort_by_gvec_mag=False):
             # planewaves = int(pws_in_calc)   # if fft not used
             try:
                 if (np.abs(np.array(this_kpoint.kcoords) - np.array([kx, ky, kz])) > 1.e-5).any():
-                    print("finished reading kpoint "
-                          "{}".format(this_kpoint.kcoords))
+                    logger.debug("finished reading kpoint "
+                                 "{}".format(this_kpoint.kcoords))
                     if return_first_k:
                         return this_kpoint
                     kpoints.append(this_kpoint)
@@ -161,7 +164,7 @@ def read_wfc(wfc_file, return_first_k=False, sort_by_gvec_mag=False):
                 this_kpoint.append(sort_eigenv(EigenV(occ, gvecs, evec)))
             else:
                 this_kpoint.append(EigenV(occ, gvecs, evec))
-    print("finished reading kpoint {}".format(this_kpoint.kcoords))
+    logger.debug("finished reading kpoint {}".format(this_kpoint.kcoords))
     kpoints.append(this_kpoint)
     return kpoints
 
@@ -227,7 +230,7 @@ def get_kpoint2_aligned_with_kpoint1(kpoint1, kpoint2):
     """
     raw_overlap = compute_overlap(kpoint1, kpoint2)
     u, s, v = np.linalg.svd(raw_overlap)
-    print("aligning: \n kpoint1: {} \n kpoint2: {} \n min singular value: {}".format(
+    logger.debug("aligning: \n kpoint1: {} \n kpoint2: {} \n min singular value: {}".format(
         kpoint1.kcoords, kpoint2.kcoords, s.min()))
     rot_mat = np.linalg.inv(np.dot(u, v))
     new_eigenvs = np.zeros((len(kpoint2), len(kpoint2[0].evec), 2))
@@ -313,7 +316,7 @@ def get_indiv_band_bphases(kpoint1, kpoint2, returnEigVecs=False):
     # rot_mat = np.linalg.inv(np.dot(u, v))
     rot_mat = np.dot(u, v)
     rot_mat_eigenvals = np.linalg.eigvals(rot_mat)
-    print("min sing val from indiv bphase step = {}".format(min(s)))
+    logger.debug("min sing val from indiv bphase step = {}".format(min(s)))
     return np.log(rot_mat_eigenvals).imag
 
 
@@ -333,7 +336,7 @@ def construct_pt_gauge_along_kz(wfc):
     for kpt in wfc:
         bz_2d_points.append((kpt.kcoords[0], kpt.kcoords[1]))
     for kx, ky in set(bz_2d_points):
-        print(kx, ky)
+        logger.debug("{} {}".format(kx, ky))
         this_string_indicies = get_string_indicies(wfc, kx, ky)
         first_point = True
         for i in this_string_indicies:
@@ -363,8 +366,19 @@ def get_string_indicies(wfc, kx, ky):
 
 if __name__ == '__main__':
     import sys
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.INFO)
+    logger.addHandler(stream_handler)
 
-    print("reading {}".format(sys.argv[1]))
+    if len(sys.argv) > 3:
+        logfile = sys.argv[3]
+    else:
+        logfile = 'pt_phase.log'
+    file_handler = logging.FileHandler(filename=logfile, mode='w')
+    file_handler.setLevel(logging.DEBUG)
+    logger.addHandler(file_handler)
+
+    logger.info("reading {}".format(sys.argv[1]))
     wfc0 = read_wfc(sys.argv[1])
 
     # try localizing wfc0 first
@@ -373,7 +387,7 @@ if __name__ == '__main__':
     # wfc0 = wfc_occ0_smooth
     # end localizing wfc0
 
-    print("reading {}".format(sys.argv[2]))
+    logger.info("reading {}".format(sys.argv[2]))
     wfc1 = read_wfc(sys.argv[2])
     # wfc1 = get_wfc2_aligned_with_wfc1(wfc0, read_wfc(sys.argv[2]))
 
@@ -409,7 +423,7 @@ if __name__ == '__main__':
     string_sum = 0.
     string_vals = []
     for kx, ky in bz_2d_set:
-        print("strings along {}, {}:".format(kx, ky))
+        logger.info("strings along {}, {}:".format(kx, ky))
         loops = strings_to_loops(get_string(wfc0, kx, ky),
                                  get_string(wfc1, kx, ky))
         inner_loop_sum = 0.
@@ -418,26 +432,27 @@ if __name__ == '__main__':
             curly_U = np.identity(len(overlaps[0][0]))
             for M, kpt_p in zip(overlaps, kpt_pairs):
                 u, s, v = np.linalg.svd(M)
-                print("finding curly M: \n",
-                      " kpoint1: {} \n",
-                      " kpoint2: {} \n",
-                      " min singular value: {}".format(
-                          kpt_p[0], kpt_p[1], min(s)))
+                smallest_sing_val = min(s)
+                logger.debug(("finding curly M: \n"
+                              " kpoint1: {} \n"
+                              " kpoint2: {} \n"
+                              " min singular value: {}").format(
+                                  kpt_p[0], kpt_p[1], smallest_sing_val))
+                if smallest_sing_val < 0.1:
+                    logger.warning('MIN SINGULAR VALUE OF {} FOUND!'.format(
+                        smallest_sing_val))
                 curly_M = np.dot(u, v)
                 curly_U = np.dot(curly_U, curly_M)
             wlevs_loop = np.log(np.linalg.eigvals(curly_U)).imag
-            print(wlevs_loop)
-            print()
+            logger.debug('loop eigenvalues:\n {}'.format(wlevs_loop))
             inner_loop_sum += sum(wlevs_loop) / np.pi
-        print(inner_loop_sum)
+        logger.debug('this strings change in phase: {}'.format(inner_loop_sum))
         string_vals.append(inner_loop_sum)
         string_sum += inner_loop_sum
-    print()
-    print("summary")
+    logger.info("summary")
     for k, val in zip(bz_2d_set, string_vals):
-        print("{}: {}".format(k, val))
-    print("average across strings:")
-    print(string_sum / len(bz_2d_set))
+        logger.info("{}: {}".format(k, val))
+    logger.info("average across strings: {}".format(string_sum / len(bz_2d_set)))
     # end test of all small loops
 
     # begin test of all large loops (across all of kz)
