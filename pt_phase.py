@@ -5,9 +5,11 @@ import logging
 # from cmath import log
 import numpy as np
 from numba import jit
+from multiprocessing import Pool
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
 
 class EigenV():
     """
@@ -364,6 +366,27 @@ def get_string_indicies(wfc, kx, ky):
     return [entry[0] for entry in result]
 
 
+def pt_phase_from_loop(loop):
+    overlaps, kpt_pairs = get_overlaps_along_path(loop)
+    curly_U = np.identity(len(overlaps[0][0]))
+    for M, kpt_p in zip(overlaps, kpt_pairs):
+        u, s, v = np.linalg.svd(M)
+        smallest_sing_val = min(s)
+        logger.debug(("finding curly M: \n"
+                      " kpoint1: {} \n"
+                      " kpoint2: {} \n"
+                      " min singular value: {}").format(
+                          kpt_p[0], kpt_p[1], smallest_sing_val))
+        if smallest_sing_val < 0.1:
+            logger.warning('MIN SINGULAR VALUE OF {} FOUND!'.format(
+                smallest_sing_val))
+        curly_M = np.dot(u, v)
+        curly_U = np.dot(curly_U, curly_M)
+    wlevs_loop = np.log(np.linalg.eigvals(curly_U)).imag
+    logger.debug('loop eigenvalues:\n {}'.format(wlevs_loop))
+    return sum(wlevs_loop)
+
+
 if __name__ == '__main__':
     import sys
     stream_handler = logging.StreamHandler()
@@ -422,33 +445,24 @@ if __name__ == '__main__':
     # begin test of all small loops, but using eqn 3.119 instead of constructing pt gauge explicitly
     string_sum = 0.
     string_vals = []
+    import time
+    start_time = time.time()
     for kx, ky in bz_2d_set:
         logger.info("strings along {}, {}:".format(kx, ky))
         loops = strings_to_loops(get_string(wfc0, kx, ky),
                                  get_string(wfc1, kx, ky))
         inner_loop_sum = 0.
-        for loop in loops:
-            overlaps, kpt_pairs = get_overlaps_along_path(loop)
-            curly_U = np.identity(len(overlaps[0][0]))
-            for M, kpt_p in zip(overlaps, kpt_pairs):
-                u, s, v = np.linalg.svd(M)
-                smallest_sing_val = min(s)
-                logger.debug(("finding curly M: \n"
-                              " kpoint1: {} \n"
-                              " kpoint2: {} \n"
-                              " min singular value: {}").format(
-                                  kpt_p[0], kpt_p[1], smallest_sing_val))
-                if smallest_sing_val < 0.1:
-                    logger.warning('MIN SINGULAR VALUE OF {} FOUND!'.format(
-                        smallest_sing_val))
-                curly_M = np.dot(u, v)
-                curly_U = np.dot(curly_U, curly_M)
-            wlevs_loop = np.log(np.linalg.eigvals(curly_U)).imag
-            logger.debug('loop eigenvalues:\n {}'.format(wlevs_loop))
-            inner_loop_sum += sum(wlevs_loop) / np.pi
+        # for loop in loops:
+        #     inner_loop_sum += pt_phase_from_loop(loop) / np.pi
+        loop_pool = Pool(4)
+        inner_loop_vals = loop_pool.map(pt_phase_from_loop, loops)
+        loop_pool.close()
+        loop_pool.join()
+        inner_loop_sum = sum(inner_loop_vals) / np.pi
         logger.debug('this strings change in phase: {}'.format(inner_loop_sum))
         string_vals.append(inner_loop_sum)
         string_sum += inner_loop_sum
+    logger.debug("time info: {} seconds".format(time.time() - start_time))
     logger.info("summary")
     for k, val in zip(bz_2d_set, string_vals):
         logger.info("{}: {}".format(k, val))
