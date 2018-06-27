@@ -115,6 +115,19 @@ class Kpoint(MutableSequence):
                               s.evec)
                        for s in self.eigenvs])
 
+    def real_space_trans(self, trans):
+        new_eigenvs = []
+        for ev in self._eigenvs:
+            #  if we eventually rewrite so that EigenV uses complex types directly
+            #  may want to just modify in place (in a vectorized way for speed)
+            #  for now we will return a copy
+            new_amps = [-2 * np.pi * amp * np.e**(1.j * np.dot((np.array(self.kcoords) + np.array(gv)),
+                                                               np.array(trans)))
+                        for gv, amp in zip(ev.gvecs, ev.get_evec_complex())]
+            new_eigenvs.append(EigenV(ev.occupation, ev.gvecs,
+                                      np.array([[new_a.real, new_a.imag] for new_a in new_amps])))
+        return Kpoint(self.kcoords, self.weight, self.planewaves, new_eigenvs)
+
 
 def sort_eigenv(eigenv, kcoord=[0., 0., 0.]):
     """returns an EigenV object with components sorted by magnitude of the gvector+kcoord
