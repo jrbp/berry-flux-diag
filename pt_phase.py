@@ -409,14 +409,14 @@ def pt_phase_from_strings(bz_2d_pt, wfc0, wfc1):
     logger.info("strings along {}, {}:".format(kx, ky))
     loops = strings_to_loops(get_string(wfc0, kx, ky),
                              get_string(wfc1, kx, ky))
-    # inner_loop_sum = 0.
-    # for loop in loops:
-    #     inner_loop_sum += pt_phase_from_loop(loop) / np.pi
-    loop_pool = Pool(4)
-    inner_loop_vals = loop_pool.map(pt_phase_from_loop, loops)
-    loop_pool.close()
-    loop_pool.join()
-    inner_loop_sum = sum(inner_loop_vals) / np.pi
+    inner_loop_sum = 0.
+    for loop in loops:
+        inner_loop_sum += pt_phase_from_loop(loop) / np.pi
+    # loop_pool = Pool(4)
+    # inner_loop_vals = loop_pool.map(pt_phase_from_loop, loops)
+    # loop_pool.close()
+    # loop_pool.join()
+    # inner_loop_sum = sum(inner_loop_vals) / np.pi
     logger.debug('this strings change in phase: {}'.format(inner_loop_sum))
     return inner_loop_sum
 
@@ -446,16 +446,16 @@ if __name__ == '__main__':
     string_vals = []
     import time
     start_time = time.time()
-    for kx, ky in bz_2d_set:
-        inner_loop_sum = pt_phase_from_strings((kx, ky), wfc0, wfc1)
-        string_vals.append(inner_loop_sum)
-    # string_pool = Pool(4)
-    # string_vals = string_pool.starmap(pt_phase_from_strings,
-    #                                   zip(bz_2d_set,
-    #                                       itertools.repeat(wfc0),
-    #                                       itertools.repeat(wfc1)))
-    # string_pool.close()
-    # string_pool.join()
+    # for kx, ky in bz_2d_set:
+    #     inner_loop_sum = pt_phase_from_strings((kx, ky), wfc0, wfc1)
+    #     string_vals.append(inner_loop_sum)
+    string_pool = Pool(4)
+    string_vals = string_pool.starmap(pt_phase_from_strings,
+                                      zip(bz_2d_set,
+                                          itertools.repeat(wfc0),
+                                          itertools.repeat(wfc1)))
+    string_pool.close()
+    string_pool.join()
     string_sum = sum(string_vals)
     logger.debug("time info: {} seconds".format(time.time() - start_time))
     logger.info("summary")
