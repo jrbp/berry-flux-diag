@@ -189,12 +189,22 @@ def compute_overlap(evs0, evs1, dg=np.array([0, 0, 0])):
     Args: evs0, evs1: each a list of EigenV objects
     Returns: overlap matrix overlap[m,n] = <evs0_m | evs1_n>
     """
+    try:
+        kc0 = evs0.kcoords
+        kc1 = evs1.kcoords
+        if np.all(kc0 == kc1):
+            overlap = compute_overlap_same_gvecs(evs0, evs1)
+            return overlap
+    except Exception as e:
+        logger.warning('{} in compute overlap with same gvecs')
+        pass
     evs0_arr = np.array([ev0.get_evec_complex() for ev0 in evs0])
     evs1_arr = np.array([ev1.get_evec_complex() for ev1 in evs1])
     evs0_gs = np.array([ev0.gvecs for ev0 in evs0])
     evs1_gs = np.array([ev1.gvecs for ev1 in evs1])
     overlap = np.zeros((len(evs0), len(evs0)), dtype=complex)
-    return compute_overlap_jit(overlap, evs0_arr, evs1_arr, evs0_gs, evs1_gs, dg)
+    overlap = compute_overlap_jit(overlap, evs0_arr, evs1_arr, evs0_gs, evs1_gs, dg)
+    return overlap
     # overlap = np.zeros((len(evs0), len(evs0)), dtype=complex)
     # for m, ev0 in enumerate(evs0):
     #     for n, ev1 in enumerate(evs1):
