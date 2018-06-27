@@ -121,8 +121,9 @@ class Kpoint(MutableSequence):
             #  if we eventually rewrite so that EigenV uses complex types directly
             #  may want to just modify in place (in a vectorized way for speed)
             #  for now we will return a copy
-            new_amps = [-2 * np.pi * amp * np.e**(1.j * np.dot((np.array(self.kcoords) + np.array(gv)),
-                                                               np.array(trans)))
+            new_amps = [amp * np.e**(-2 * np.pi * 1.j
+                                     * np.dot((np.array(self.kcoords) + np.array(gv)),
+                                              np.array(trans)))
                         for gv, amp in zip(ev.gvecs, ev.get_evec_complex())]
             new_eigenvs.append(EigenV(ev.occupation, ev.gvecs,
                                       np.array([[new_a.real, new_a.imag] for new_a in new_amps])))
