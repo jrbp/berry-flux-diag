@@ -241,6 +241,27 @@ def compute_overlap_element(gvs0, ev0_conj, gvs1, ev1, dg):
     return this_element
 
 
+def find_min_singular_value(wfc0, wfc1, same_gvecs=False):
+    """
+    Args: wfc0, wfc1: each a list of Kpoint objects
+    Returns: The (value, coordinate) of the smallest of all singular values
+    across all kpoints from the singular value decomposition
+    preformed at each kpoint, if this is too small the states
+    were unable to be reasonably aligned
+    """
+    s_mins = np.zeros(len(wfc0))
+    for i, kpt0, kpt1 in zip(itertools.count(), wfc0, wfc1):
+        if same_gvecs:
+            overlap = compute_overlap_same_gvecs(kpt0.get_occupied_only(),
+                                                 kpt1.get_occupied_only())
+        else:
+            overlap = compute_overlap(kpt0.get_occupied_only(),
+                                      kpt1.get_occupied_only())
+        s = np.linalg.svd(overlap, compute_uv=False)
+        s_mins[i] = s.min()
+    return s_mins.min(), wfc0[s_mins.argmin()].kcoords
+
+
 def get_string(wfc, kx, ky):
     result = []
     for kpt in wfc:
