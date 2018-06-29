@@ -5,6 +5,7 @@ import itertools
 # from itertools import count
 # from cmath import log
 import numpy as np
+from scipy.optimize import minimize_scalar
 from numba import jit
 from multiprocessing import Pool
 
@@ -272,6 +273,17 @@ def find_min_singular_value(wfc0, wfc1, same_gvecs=False):
     return s_mins.min(), wfc0[s_mins.argmin()].kcoords
 
 
+def translation_to_align_w1_with_w2(wfc0, wfc1, polar_dir=[0, 0, 1]):
+    def min_sing_from_trans(trans):
+        translated_wfc = [kpt.real_space_trans(trans * np.array(polar_dir)) for kpt in wfc0]
+        return -1 * find_min_singular_value(translated_wfc, wfc1, same_gvecs=True)[0]
+    minimize_res = minimize_scalar(min_sing_from_trans, bounds=(-0.5, 0.5))
+    logger.debug(minimize_res)
+    if minimize_res.success and minimize_res.fun < -0.1:
+        return minimize_res.x * np.array(polar_dir)
+    else:
+        raise Exception('Unable to align wavefunctions with a translation')
+
 def get_string(wfc, kx, ky):
     result = []
     for kpt in wfc:
@@ -481,6 +493,14 @@ if __name__ == '__main__':
 
     logger.info("reading {}".format(sys.argv[2]))
     wfc1 = read_wfc(sys.argv[2])
+
+    # translate wfc0 to maximize the smallest singular value
+    trans = translation_to_align_w1_with_w2(wfc0, wfc1)
+    logger.info("Translating {} in real space by {}".format(sys.argv[1], trans))
+    wfc0 = [kpt.real_space_trans(trans) for kpt in wfc0]
+
+    # saving time on the PTO sc cell version, since I've already found the translation
+    # wfc0 = [kpt.real_space_trans([0., 0., -0.16236]) for kpt in wfc0]
 
     bz_2d_set = sorted(set([(kpt.kcoords[0], kpt.kcoords[1]) for kpt in wfc0]))
 
