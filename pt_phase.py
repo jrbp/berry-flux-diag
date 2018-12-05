@@ -119,9 +119,10 @@ class Kpoint(MutableSequence):
     def real_space_trans(self, trans):
         new_eigenvs = []
         for ev in self._eigenvs:
-            f1 = np.e**(-2 * np.pi * 1.j * np.dot(self.kcoords, np.array(trans)))
+            # commented out f1 terms would be desired if we were translating full wfc (psi) not cell periodic par (u)?
+            #f1 = np.e**(-2 * np.pi * 1.j * np.dot(self.kcoords, np.array(trans)))
             f2 = np.e**(-2 * np.pi * 1.j * np.inner(ev.gvecs, np.array(trans)))
-            new_amps = ev.get_evec_complex() * f2 * f1
+            new_amps = ev.get_evec_complex() * f2# * f1
             new_eigenvs.append(EigenV(ev.occupation, ev.gvecs,
                                       np.stack((new_amps.real, new_amps.imag), axis=1)))
         return Kpoint(self.kcoords, self.weight, self.planewaves, new_eigenvs)
