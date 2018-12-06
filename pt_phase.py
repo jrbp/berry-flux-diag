@@ -5,7 +5,7 @@ import itertools
 # from itertools import count
 # from cmath import log
 import numpy as np
-from scipy.optimize import minimize_scalar
+from scipy.optimize import brute
 from numba import jit
 from multiprocessing import Pool
 
@@ -157,8 +157,8 @@ def read_wfc(wfc_file, return_first_k=False, sort_by_gvec_mag=False):
             #             if using the fft to make same number of planewaves at each kpt
             #             this is due to how the modified cut3d is writing wfcs
             #             this should be changed there
-            planewaves = int(max_planewaves)  # if fft used
-            # planewaves = int(pws_in_calc)   # if fft not used
+            # planewaves = int(max_planewaves)  # if fft used
+            planewaves = int(pws_in_calc)   # if fft not used
             try:
                 if (np.abs(np.array(this_kpoint.kcoords) - np.array([kx, ky, kz])) > 1.e-5).any():
                     logger.debug("finished reading kpoint "
@@ -213,6 +213,8 @@ def compute_overlap(evs0, evs1, dg=np.array([0, 0, 0])):
     evs1_arr = np.array([ev1.get_evec_complex() for ev1 in evs1])
     evs0_gs = np.array([ev0.gvecs for ev0 in evs0])
     evs1_gs = np.array([ev1.gvecs for ev1 in evs1])
+    if len(evs0) != len(evs1):
+        logger.warning('different number of eigenvecs between kpoints {} and {}'.format(kc0, kc1))
     overlap = np.zeros((len(evs0), len(evs0)), dtype=complex)
     overlap = compute_overlap_jit(overlap, evs0_arr, evs1_arr, evs0_gs, evs1_gs, dg)
     return overlap
@@ -277,12 +279,13 @@ def translation_to_align_w1_with_w2(wfc0, wfc1, polar_dir=[0, 0, 1]):
     def min_sing_from_trans(trans):
         translated_wfc = [kpt.real_space_trans(trans * np.array(polar_dir)) for kpt in wfc0]
         return -1 * find_min_singular_value(translated_wfc, wfc1, same_gvecs=True)[0]
-    minimize_res = minimize_scalar(min_sing_from_trans, bounds=(-0.5, 0.5))
+    minimize_res = brute(min_sing_from_trans, [[-0.5, 0.5]], Ns=30, full_output=True)
     logger.debug(minimize_res)
-    if minimize_res.success and minimize_res.fun < -0.1:
-        return minimize_res.x * np.array(polar_dir)
+    if minimize_res[1] < -0.1:
+        return minimize_res[0][0] * np.array(polar_dir)
     else:
         raise Exception('Unable to align wavefunctions with a translation')
+
 
 def get_string(wfc, kx, ky):
     result = []
@@ -451,6 +454,10 @@ def pt_phase_from_loop(loop):
             logger.warning('MIN SINGULAR VALUE OF {} FOUND!'.format(
                 smallest_sing_val))
         curly_M = np.dot(u, v)
+        #logger.debug('\n')
+        #logger.debug(M)
+        #logger.debug('\n')
+        #logger.debug(curly_M)
         curly_U = np.dot(curly_U, curly_M)
     wlevs_loop = np.log(np.linalg.eigvals(curly_U)).imag
     logger.debug('loop eigenvalues:\n {}'.format(wlevs_loop))
@@ -495,12 +502,13 @@ if __name__ == '__main__':
     wfc1 = read_wfc(sys.argv[2])
 
     # translate wfc0 to maximize the smallest singular value
+    logger.info("Finding translation to align wavefunctions")
     trans = translation_to_align_w1_with_w2(wfc0, wfc1)
     logger.info("Translating {} in real space by {}".format(sys.argv[1], trans))
     wfc0 = [kpt.real_space_trans(trans) for kpt in wfc0]
 
     # saving time on the PTO sc cell version, since I've already found the translation
-    # wfc0 = [kpt.real_space_trans([0., 0., -0.16236]) for kpt in wfc0]
+    # wfc0 = [kpt.real_space_trans([ 0., 0., 0.04154095]) for kpt in wfc0]
 
     bz_2d_set = sorted(set([(kpt.kcoords[0], kpt.kcoords[1]) for kpt in wfc0]))
 
