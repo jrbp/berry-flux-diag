@@ -334,7 +334,7 @@ def strings_to_single_loop(string1, string2):
     return loop
 
 
-def strings_to_loops(string1, string2):
+def strings_to_loops(string1, string2): # now adds last pt to close loop
     # IMPORTANT: currently hard coded for strings along kz
     # may want to add check that string1 and string2 are same length
     num_pts_in_string = len(string1)
@@ -343,9 +343,9 @@ def strings_to_loops(string1, string2):
         if i+1 == num_pts_in_string:
             loops.append([string1[i], string2[i],
                           string2[0].get_g_shifted([0, 0, 1]),
-                          string1[0].get_g_shifted([0, 0, 1])])
+                          string1[0].get_g_shifted([0, 0, 1]), string1[i]])
         else:
-            loops.append([string1[i], string2[i], string2[i+1], string1[i+1]])
+            loops.append([string1[i], string2[i], string2[i+1], string1[i+1], string1[i]])
     return loops
 
 
@@ -369,16 +369,13 @@ def align_bands_along_path(kpt_path):
     return smooth_path
 
 
-def get_overlaps_along_path(kpt_path):
+def get_overlaps_along_path(kpt_path):     # NO LONGER SHIFTS LAST PT
     nkpts = len(kpt_path)
     overlaps = []
     pairs_of_ks = []
-    for i in range(nkpts):
+    for i in range(nkpts - 1):
         this_kpt = kpt_path[i].get_occupied_only()
-        if i == nkpts - 1:
-            next_kpt = kpt_path[0].get_occupied_only()
-        else:
-            next_kpt = kpt_path[i+1].get_occupied_only()
+        next_kpt = kpt_path[i+1].get_occupied_only()
         pairs_of_ks.append((this_kpt.kcoords, next_kpt.kcoords))
         raw_overlap = compute_overlap(this_kpt, next_kpt)
         overlaps.append(raw_overlap)
@@ -439,8 +436,8 @@ def get_string_indicies(wfc, kx, ky):
     return [entry[0] for entry in result]
 
 
-def pt_phase_from_loop(loop):
-    overlaps, kpt_pairs = get_overlaps_along_path(loop)
+def curly_u_from_path(kpt_path):
+    overlaps, kpt_pairs = get_overlaps_along_path(kpt_path)
     curly_U = np.identity(len(overlaps[0][0]))
     for M, kpt_p in zip(overlaps, kpt_pairs):
         u, s, v = np.linalg.svd(M)
@@ -459,11 +456,16 @@ def pt_phase_from_loop(loop):
         #logger.debug('\n')
         #logger.debug(curly_M)
         curly_U = np.dot(curly_U, curly_M)
-    wlevs_loop = np.log(np.linalg.eigvals(curly_U)).imag
-    logger.debug('loop eigenvalues:\n {}'.format(wlevs_loop))
-    return sum(wlevs_loop)
+    return curly_U
+
+def pt_phase_from_path(kpt_path):
+    curly_U = curly_u_from_path(kpt_path)
+    wlevs = np.log(np.linalg.eigvals(curly_U)).imag
+    logger.debug('loop eigenvalues:\n {}'.format(wlevs))
+    return sum(wlevs)
 
 
+# fro spont pol, should change name of function
 def pt_phase_from_strings(bz_2d_pt, wfc0, wfc1):
     kx, ky = bz_2d_pt
     logger.info("strings along {}, {}:".format(kx, ky))
@@ -471,9 +473,9 @@ def pt_phase_from_strings(bz_2d_pt, wfc0, wfc1):
                              get_string(wfc1, kx, ky))
     inner_loop_sum = 0.
     for loop in loops:
-        inner_loop_sum += pt_phase_from_loop(loop) / np.pi
+        inner_loop_sum += pt_phase_from_path(loop) / np.pi
     # loop_pool = Pool(4)
-    # inner_loop_vals = loop_pool.map(pt_phase_from_loop, loops)
+    # inner_loop_vals = loop_pool.map(pt_phase_from_path, loops)
     # loop_pool.close()
     # loop_pool.join()
     # inner_loop_sum = sum(inner_loop_vals) / np.pi
