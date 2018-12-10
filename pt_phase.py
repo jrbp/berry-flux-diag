@@ -484,29 +484,32 @@ def pt_phase_from_strings(bz_2d_pt, wfc0, wfc1):
 
 
 if __name__ == '__main__':
-    import sys
+    from argparse import ArgumentParser
+    arg_parser = ArgumentParser()
+    arg_parser.add_argument("wfc_files", nargs=2, help="wavefunction files for each structure")
+    arg_parser.add_argument("-l", "--log_file", required=False,
+                            default="pt_phase.log", help="log file name, default is pt_phase.log")
+    args = arg_parser.parse_args()
+
     stream_handler = logging.StreamHandler()
     stream_handler.setLevel(logging.INFO)
     logger.addHandler(stream_handler)
 
-    if len(sys.argv) > 3:
-        logfile = sys.argv[3]
-    else:
-        logfile = 'pt_phase.log'
+    logfile = args.log_file
     file_handler = logging.FileHandler(filename=logfile, mode='w')
     file_handler.setLevel(logging.DEBUG)
     logger.addHandler(file_handler)
 
-    logger.info("reading {}".format(sys.argv[1]))
-    wfc0 = read_wfc(sys.argv[1])
+    logger.info("reading {}".format(args.wfc_files[0]))
+    wfc0 = read_wfc(args.wfc_files[0])
 
-    logger.info("reading {}".format(sys.argv[2]))
-    wfc1 = read_wfc(sys.argv[2])
+    logger.info("reading {}".format(args.wfc_files[1]))
+    wfc1 = read_wfc(args.wfc_files[1])
 
     # translate wfc0 to maximize the smallest singular value
     logger.info("Finding translation to align wavefunctions")
     trans = translation_to_align_w1_with_w2(wfc0, wfc1)
-    logger.info("Translating {} in real space by {}".format(sys.argv[1], trans))
+    logger.info("Translating {} in real space by {}".format(args.wfc_files[1], trans))
     wfc0 = [kpt.real_space_trans(trans) for kpt in wfc0]
 
     # saving time on the PTO sc cell version, since I've already found the translation
