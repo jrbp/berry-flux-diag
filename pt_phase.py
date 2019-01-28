@@ -2,6 +2,7 @@
 from collections import MutableSequence
 import logging
 import itertools
+import json
 # from itertools import count
 # from cmath import log
 import numpy as np
@@ -254,7 +255,7 @@ def compute_overlap_element(gvs0, ev0_conj, gvs1, ev1, dg):
     return this_element
 
 
-def find_min_singular_value(wfc0, wfc1, same_gvecs=False):
+def find_min_singular_value(wfc0, wfc1, same_gvecs=False, s_vals_file=None):
     """
     Args: wfc0, wfc1: each a list of Kpoint objects
     Returns: The (value, coordinate) of the smallest of all singular values
@@ -263,6 +264,8 @@ def find_min_singular_value(wfc0, wfc1, same_gvecs=False):
     were unable to be reasonably aligned
     """
     s_mins = np.zeros(len(wfc0))
+    if s_vals_file is not None:
+        s_val_dict = {}
     for i, kpt0, kpt1 in zip(itertools.count(), wfc0, wfc1):
         if same_gvecs:
             overlap = compute_overlap_same_gvecs(kpt0.get_occupied_only(),
@@ -271,7 +274,12 @@ def find_min_singular_value(wfc0, wfc1, same_gvecs=False):
             overlap = compute_overlap(kpt0.get_occupied_only(),
                                       kpt1.get_occupied_only())
         s = np.linalg.svd(overlap, compute_uv=False)
+        if s_vals_file is not None:
+            s_val_dict[str(kpt0.kcoords)] = list(s)
         s_mins[i] = s.min()
+    if s_vals_file is not None:
+        with open(s_vals_file, 'w') as f:
+            json.dump(s_val_dict, f, indent=3)
     return s_mins.min(), wfc0[s_mins.argmin()].kcoords
 
 
@@ -614,6 +622,8 @@ if __name__ == '__main__':
                             help="if present plot various things")
     arg_parser.add_argument("-n", "--num_cpus", required=False, default=4,
                             help="number of cpus to parallelize over")
+    arg_parser.add_argument("-sf", "--singular_values_file", required=False, default=4,
+                            help="file name to write singular values (as json)")
     arg_parser.add_argument("-t", "--translation", required=False, default=None,
                             help="translation to use on wavefunction")
     args = arg_parser.parse_args()
@@ -647,6 +657,9 @@ if __name__ == '__main__':
 
     if args.plot:
         make_plots(wfc0, wfc1)
+
+    if args.singular_values_file:
+        min_s = find_min_singular_value(wfc0, wfc1, same_gvecs=True, s_vals_file=args.singular_values_file)
 
     bz_2d_set = sorted(set([(kpt.kcoords[0], kpt.kcoords[1]) for kpt in wfc0]))
 
