@@ -489,6 +489,8 @@ if __name__ == '__main__':
     arg_parser.add_argument("wfc_files", nargs=2, help="wavefunction files for each structure")
     arg_parser.add_argument("-l", "--log_file", required=False,
                             default="pt_phase.log", help="log file name, default is pt_phase.log")
+    arg_parser.add_argument("-n", "--num_cpus", required=False, default=4,
+                            help="number of cpus to parallelize over")
     args = arg_parser.parse_args()
 
     stream_handler = logging.StreamHandler()
@@ -523,7 +525,7 @@ if __name__ == '__main__':
     # for kx, ky in bz_2d_set:
     #     inner_loop_sum = pt_phase_from_strings((kx, ky), wfc0, wfc1)
     #     string_vals.append(inner_loop_sum)
-    string_pool = Pool(4)
+    string_pool = Pool(int(args.num_cpus)
     string_vals = string_pool.starmap(pt_phase_from_strings,
                                       zip(bz_2d_set,
                                           itertools.repeat(wfc0),
