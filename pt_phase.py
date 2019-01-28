@@ -491,6 +491,8 @@ if __name__ == '__main__':
                             default="pt_phase.log", help="log file name, default is pt_phase.log")
     arg_parser.add_argument("-n", "--num_cpus", required=False, default=4,
                             help="number of cpus to parallelize over")
+    arg_parser.add_argument("-t", "--translation", required=False, default=None,
+                            help="translation to use on wavefunction")
     args = arg_parser.parse_args()
 
     stream_handler = logging.StreamHandler()
@@ -509,13 +511,17 @@ if __name__ == '__main__':
     wfc1 = read_wfc(args.wfc_files[1])
 
     # translate wfc0 to maximize the smallest singular value
-    logger.info("Finding translation to align wavefunctions")
-    trans = translation_to_align_w1_with_w2(wfc0, wfc1)
-    logger.info("Translating {} in real space by {}".format(args.wfc_files[1], trans))
-    wfc0 = [kpt.real_space_trans(trans) for kpt in wfc0]
+    if args.translation:
+        wfc0 = [kpt.real_space_trans([0., 0., float(args.translation)]) for kpt in wfc0]
+        # saving time on the PTO sc cell version, since I've already found the translation
+        # wfc0 = [kpt.real_space_trans([ 0., 0., 0.04154095]) for kpt in wfc0]
+    else:
+        logger.info("Finding translation to align wavefunctions")
+        trans = translation_to_align_w1_with_w2(wfc0, wfc1)
+        logger.info("Translating {} in real space by {}".format(args.wfc_files[1], trans))
+        wfc0 = [kpt.real_space_trans(trans) for kpt in wfc0]
 
-    # saving time on the PTO sc cell version, since I've already found the translation
-    # wfc0 = [kpt.real_space_trans([ 0., 0., 0.04154095]) for kpt in wfc0]
+
 
     bz_2d_set = sorted(set([(kpt.kcoords[0], kpt.kcoords[1]) for kpt in wfc0]))
 
