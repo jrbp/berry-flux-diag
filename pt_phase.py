@@ -656,7 +656,7 @@ if __name__ == '__main__':
     # for kx, ky in bz_2d_set:
     #     inner_loop_sum = pt_phase_from_strings((kx, ky), wfc0, wfc1)
     #     string_vals.append(inner_loop_sum)
-    string_pool = Pool(int(args.num_cpus)
+    string_pool = Pool(int(args.num_cpus))
     string_vals = string_pool.starmap(pt_phase_from_strings,
                                       zip(bz_2d_set,
                                           itertools.repeat(wfc0),
