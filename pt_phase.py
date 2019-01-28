@@ -482,6 +482,127 @@ def pt_phase_from_strings(bz_2d_pt, wfc0, wfc1):
     logger.debug('this strings change in phase: {}'.format(inner_loop_sum))
     return inner_loop_sum
 
+def make_plots(wfc0, wfc1):
+    # quick copy paste for now, should break up and add options, make not awful
+    # possibly plot bits as they are computed in normal run
+    from matplotlib import pyplot as plt
+    kx = 0.
+    ky = 0.
+
+    string0 = get_string(wfc0, kx, ky)
+    string0.append(string0[0].get_g_shifted([0, 0, 1])) # add the kpoint shifted by a g vector
+    string1 = get_string(wfc1, kx, ky)
+    string1.append(string1[0].get_g_shifted([0, 0, 1])) # add the kpoint shifted by a g vector
+
+    # WANNIER CENTERS
+    curly_U0 = curly_u_from_path(string0)
+    wlevs0 = np.log(np.linalg.eigvals(curly_U0)).imag
+    curly_U1 = curly_u_from_path(string1)
+    wlevs1 = np.log(np.linalg.eigvals(curly_U1)).imag
+
+    fig, axarr = plt.subplots(nrows = 2, sharex=True, gridspec_kw={'height_ratios':[4, 1], 'hspace':0})
+    axarr[0].hist(wlevs0, bins=20)
+    axarr[1].eventplot(wlevs0, orientation='horizontal', colors='b')
+    axarr[1].get_yaxis().set_visible(False)
+    axarr[1].set_ylim(0.5, 1.)
+    axarr[1].set_xlim(-3.14159, 3.14159)
+    axarr[1].set_xlabel(r'$\mathrm{Imln}$ eigenvalues of $\mathfrak{U}$')
+    axarr[0].set_ylabel(r'binned occurances of eigenvalue')
+    fig.suptitle('kx={}, ky={}, structure A'.format(kx, ky))
+    plt.savefig('sA_wannier_cents.eps')
+
+    fig, axarr = plt.subplots(nrows = 2, sharex=True, gridspec_kw={'height_ratios':[4, 1], 'hspace':0})
+    axarr[0].hist(wlevs1, bins=20)
+    axarr[1].eventplot(wlevs1, orientation='horizontal', colors='b')
+    axarr[1].get_yaxis().set_visible(False)
+    axarr[1].set_ylim(0.5, 1.)
+    axarr[1].set_xlim(-3.14159, 3.14159)
+    axarr[1].set_xlabel(r'$\mathrm{Imln}$ eigenvalues of $\mathfrak{U}$')
+    axarr[0].set_ylabel(r'binned occurances of eigenvalue')
+    fig.suptitle('kx={}, ky={}, structure B'.format(kx, ky))
+    plt.savefig('sB_wannier_cents.eps')
+
+    # wlevs, no alignment
+    curly_U0 = curly_u_from_path(string0)
+    curly_U1 = curly_u_from_path(string1)
+    ps_curly_U_no_align = np.dot(curly_U0.transpose().conj(), curly_U1)
+    ps_wlevs_no_align = np.log(np.linalg.eigvals(ps_curly_U_no_align)).imag
+    fig, axarr = plt.subplots(nrows = 2, sharex=True, gridspec_kw={'height_ratios':[4, 1], 'hspace':0})
+    axarr[0].hist(ps_wlevs_no_align, bins=20)
+    axarr[1].eventplot(ps_wlevs_no_align, orientation='horizontal', colors='b')
+    axarr[1].get_yaxis().set_visible(False)
+    axarr[1].set_ylim(0.5, 1.)
+    axarr[1].set_xlim(-3.14159, 3.14159)
+    axarr[1].set_xlabel(r'$\mathrm{Imln}$ eigenvalues of $\mathfrak{U}$')
+    axarr[0].set_ylabel(r'binned occurances of eigenvalue')
+    fig.suptitle(r'kx={}, ky={} $\mathfrak{{U}}_A \mathfrak{{U}}_B^\dagger$ no alignment'.format(kx, ky))
+    plt.savefig('wlevs_no_alignment.eps')
+
+    # wlevs, with alignment
+    full_loop = string0 + string1[::-1] + [string0[0]]
+    ps_curly_U = curly_u_from_path(full_loop)
+    ps_wlevs = np.log(np.linalg.eigvals(ps_curly_U)).imag
+    fig, axarr = plt.subplots(nrows = 2, sharex=True, gridspec_kw={'height_ratios':[4, 1], 'hspace':0})
+    axarr[0].hist(ps_wlevs, bins=20)
+    axarr[1].eventplot(ps_wlevs, orientation='horizontal', colors='b')
+    axarr[1].get_yaxis().set_visible(False)
+    axarr[1].set_ylim(0.5, 1.)
+    axarr[1].set_xlim(-3.14159, 3.14159)
+    axarr[1].set_xlabel(r'$\mathrm{Imln}$ eigenvalues of $\mathfrak{U}$')
+    axarr[0].set_ylabel(r'binned occurances of eigenvalue')
+    fig.suptitle(r'kx={}, ky={} $\mathfrak{{U}}_A \mathfrak{{U}}_B^\dagger$ with alignment'.format(kx, ky))
+    plt.savefig('wlevs_with_alignment.eps')
+
+    # k split wlevs, no alignment
+    loops = strings_to_loops(get_string(wfc0, kx, ky),
+                             get_string(wfc1, kx, ky))
+    ps_loop_kpts_no_align = []
+    ps_loop_curly_us_no_align = []
+    ps_loop_wlevs_no_align = []
+    for loop in loops:
+        ps_loop_kpts_no_align.append([k.kcoords for k in loop])
+        this_curly_u = np.dot(curly_u_from_path([loop[1], loop[2]]), curly_u_from_path([loop[3], loop[4]]))
+        ps_loop_curly_us_no_align.append(this_curly_u)
+        ps_wlevs = np.log(np.linalg.eigvals(this_curly_u)).imag
+        ps_loop_wlevs_no_align.append(ps_wlevs)
+    fig, axarr = plt.subplots(nrows = len(ps_loop_curly_us_no_align), sharex=True)
+    for i, ax in enumerate(axarr):
+        ax.eventplot(ps_loop_wlevs_no_align[i], orientation='horizontal', colors='b')
+        ax.get_yaxis().set_visible(False)
+        ax.set_ylim(0.5, 1.)
+        ax.set_xlim(-3.14159, 3.14159)
+        ax.set_title('kz={} to kz={}'.format(ps_loop_kpts_no_align[i][0], ps_loop_kpts_no_align[i][2]))
+    axarr[-1].set_xlabel(r'$\mathrm{Imln}$ eigenvalues of $\mathfrak{U}$')
+    fig.suptitle(r'kx={}, ky={} $\mathfrak{{U}}_A \mathfrak{{U}}_B^\dagger$ without alignment, seperated across kz'.format(kx, ky))
+    plt.savefig('k_split_wlevs_not_aligned.eps')
+
+    # k split wlevs, with alignment
+    loops = strings_to_loops(get_string(wfc0, kx, ky),
+                             get_string(wfc1, kx, ky))
+
+    ps_loop_kpts = []
+    ps_loop_curly_us = []
+    ps_loop_wlevs = []
+    for loop in loops:
+        ps_loop_kpts.append([k.kcoords for k in loop])
+        this_curly_u = curly_u_from_path(loop)
+        ps_loop_curly_us.append(this_curly_u)
+        ps_wlevs = np.log(np.linalg.eigvals(this_curly_u)).imag
+        print(ps_wlevs)
+        print(sum(ps_wlevs))
+        ps_loop_wlevs.append(ps_wlevs)
+    fig, axarr = plt.subplots(nrows = len(ps_loop_curly_us), sharex=True)
+    for i, ax in enumerate(axarr):
+        ax.eventplot(ps_loop_wlevs[i], orientation='horizontal', colors='b')
+        ax.get_yaxis().set_visible(False)
+        ax.set_ylim(0.5, 1.)
+        ax.set_xlim(-3.14159, 3.14159)
+        ax.set_title('kz={} to kz={}'.format(ps_loop_kpts[i][0], ps_loop_kpts[i][2]))
+    axarr[-1].set_xlabel(r'$\mathrm{Imln}$ eigenvalues of $\mathfrak{U}$')
+
+    fig.suptitle(r'kx={}, ky={} $\mathfrak{{U}}_A \mathfrak{{U}}_B^\dagger$ with alignment, seperated across kz'.format(kx, ky))
+    plt.savefig('k_split_wlevs_aligned.eps')
+
 
 if __name__ == '__main__':
     from argparse import ArgumentParser
@@ -489,6 +610,8 @@ if __name__ == '__main__':
     arg_parser.add_argument("wfc_files", nargs=2, help="wavefunction files for each structure")
     arg_parser.add_argument("-l", "--log_file", required=False,
                             default="pt_phase.log", help="log file name, default is pt_phase.log")
+    arg_parser.add_argument("-p", "--plot", required=False, action="store_true",
+                            help="if present plot various things")
     arg_parser.add_argument("-n", "--num_cpus", required=False, default=4,
                             help="number of cpus to parallelize over")
     arg_parser.add_argument("-t", "--translation", required=False, default=None,
@@ -522,6 +645,8 @@ if __name__ == '__main__':
         wfc0 = [kpt.real_space_trans(trans) for kpt in wfc0]
 
 
+    if args.plot:
+        make_plots(wfc0, wfc1)
 
     bz_2d_set = sorted(set([(kpt.kcoords[0], kpt.kcoords[1]) for kpt in wfc0]))
 
