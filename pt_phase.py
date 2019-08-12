@@ -283,13 +283,13 @@ def find_min_singular_value(wfc0, wfc1, same_gvecs=False, s_vals_file=None):
     return s_mins.min(), wfc0[s_mins.argmin()].kcoords
 
 
-def translation_to_align_w1_with_w2(wfc0, wfc1, polar_dir=[0, 0, 1]):
+def translation_to_align_w1_with_w2(wfc0, wfc1, polar_dir=[0, 0, 1], min_sing_tol=0.1):
     def min_sing_from_trans(trans):
         translated_wfc = [kpt.real_space_trans(trans * np.array(polar_dir)) for kpt in wfc0]
         return -1 * find_min_singular_value(translated_wfc, wfc1, same_gvecs=True)[0]
     minimize_res = brute(min_sing_from_trans, [[-0.5, 0.5]], Ns=30, full_output=True)
     logger.debug(minimize_res)
-    if minimize_res[1] < -0.1:
+    if minimize_res[1] < -1 * min_sing_tol:
         return minimize_res[0][0] * np.array(polar_dir)
     else:
         raise Exception('Unable to align wavefunctions with a translation')
@@ -620,12 +620,14 @@ if __name__ == '__main__':
                             default="pt_phase.log", help="log file name, default is pt_phase.log")
     arg_parser.add_argument("-p", "--plot", required=False, action="store_true",
                             help="if present plot various things")
-    arg_parser.add_argument("-n", "--num_cpus", required=False, default=4,
+    arg_parser.add_argument("-n", "--num_cpus", required=False, default=4, type=int,
                             help="number of cpus to parallelize over")
-    arg_parser.add_argument("-sf", "--singular_values_file", required=False, default=4,
+    arg_parser.add_argument("-sf", "--singular_values_file", required=False,
                             help="file name to write singular values (as json)")
-    arg_parser.add_argument("-t", "--translation", required=False, default=None,
+    arg_parser.add_argument("-t", "--translation", required=False, default=None, type=float,
                             help="translation to use on wavefunction")
+    arg_parser.add_argument("-s", "--min_s_tol", required=False, default=0.1, type=float,
+                            help="minimum singular value accepted in alignment, default is 0.1")
     args = arg_parser.parse_args()
 
     stream_handler = logging.StreamHandler()
@@ -645,12 +647,12 @@ if __name__ == '__main__':
 
     # translate wfc0 to maximize the smallest singular value
     if args.translation:
-        wfc0 = [kpt.real_space_trans([0., 0., float(args.translation)]) for kpt in wfc0]
+        wfc0 = [kpt.real_space_trans([0., 0., args.translation]) for kpt in wfc0]
         # saving time on the PTO sc cell version, since I've already found the translation
         # wfc0 = [kpt.real_space_trans([ 0., 0., 0.04154095]) for kpt in wfc0]
     else:
         logger.info("Finding translation to align wavefunctions")
-        trans = translation_to_align_w1_with_w2(wfc0, wfc1)
+        trans = translation_to_align_w1_with_w2(wfc0, wfc1, min_sing_tol=args.min_s_tol)
         logger.info("Translating {} in real space by {}".format(args.wfc_files[1], trans))
         wfc0 = [kpt.real_space_trans(trans) for kpt in wfc0]
 
@@ -669,7 +671,7 @@ if __name__ == '__main__':
     # for kx, ky in bz_2d_set:
     #     inner_loop_sum = pt_phase_from_strings((kx, ky), wfc0, wfc1)
     #     string_vals.append(inner_loop_sum)
-    string_pool = Pool(int(args.num_cpus))
+    string_pool = Pool(args.num_cpus)
     string_vals = string_pool.starmap(pt_phase_from_strings,
                                       zip(bz_2d_set,
                                           itertools.repeat(wfc0),
