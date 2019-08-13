@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # import os
+import time
 import logging
 # import itertools
 import json
@@ -29,13 +30,7 @@ def compute_overlap(waves0, waves1, space='r'):
                 overlap[i, j] = wv0.braket(wv1, space=space)
     return overlap
 
-
-def get_strings(kpoints, direction):
-    """ given a list of Kpoints and a direction x, y, z
-        return a list of strings of kpoints along the corresponding direction """
-    # includes the extra kpoint shifted by a gvector
-    # adapted from some very old code, super inefficient, should clean up
-    # but it's also pretty much never a bottleneck
+def direction_to_vals(direction):
     if direction == 'z':
         comps = (0, 1)
         dir_comp = 2
@@ -50,7 +45,17 @@ def get_strings(kpoints, direction):
         gvec = [1, 0, 0]
     else:
         raise ValueError('Direction must be x, y, or z')
-    bz_2d_set = sorted(set([(kpt.frac_coords[i] for i in comps)
+    return comps, dir_comp, gvec
+
+def get_strings(kpoints, direction):
+    """ given a list of Kpoints and a direction x, y, z
+        return a list of strings of kpoints along the corresponding direction """
+    # includes the extra kpoint shifted by a gvector
+    # adapted from some very old code, super inefficient, should clean up
+    # but it's also pretty much never a bottleneck
+
+    comps, dir_comp, gvec = direction_to_vals(direction)
+    bz_2d_set = sorted(set([tuple((kpt.frac_coords[i] for i in comps))
                             for kpt in kpoints]))
     strings = []
     for bz_2d_pt in bz_2d_set:
@@ -60,16 +65,20 @@ def get_strings(kpoints, direction):
                               and (abs(kpt.frac_coords[comps[1]] - bz_2d_pt[1]) < 1.e-5))
             if in_this_string:
                 this_string.append(kpt)
-        this_string.sort(key=lambda k: k.kcoords[dir_comp])
+        this_string.sort(key=lambda k: k.frac_coords[dir_comp])
         this_string.append(this_string[0] + Kpoint(gvec, kpoints.reciprocal_lattice))
         strings.append(this_string)
     return strings
 
+
 class Overlaps(MutableMapping):
-    def __init__(self, wfk_files, rspace_translations):
+    def __init__(self, wfk_files, rspace_translations=None):
         self.__dict__ = {} #TODO: possibly fill with keys of neighboring points with values None
-        self._rspace_trans = np.array(rspace_translations)
         self._wfk_files = wfk_files #TODO: check that they have same Kpoints, maybe same lattice vectors
+        if rspace_translations is not None:
+            self._rspace_trans = np.array(rspace_translations)
+        else:
+            self._optimize_rspace_trans()
 
         # below option to accept paths doesn't close files
         # for wfk_file in wfk_files:
@@ -86,7 +95,7 @@ class Overlaps(MutableMapping):
             if (key[1], key[0]) in self.__dict__:
                 # if switched version present return hermitian conjugate
                 LOGGER.debug("obtaining from Hermitian conj of {}, {}".format(key[1], key[0]))
-                return self.__dict__[(key[1], key[0])].H
+                return self.__dict__[(key[1], key[0])].T.conj()
             else:
                 self.__dict__[key] = self._compute_overlap(key)
         return self.__dict__[key]
@@ -113,6 +122,63 @@ class Overlaps(MutableMapping):
         """ Return the set of real space translations on the wavefunctions """
         return self._rspace_trans
 
+    @rspace_trans.setter
+    def rspace_trans(self, new_trans):
+        """ set real space translations on the wavefunctions
+            overlaps involving the changed states will be deleted """
+        old_trans = self._rspace_trans
+        for i, (old, new) in enumerate(zip(old_trans, new_trans)):
+            if (abs(old - new) > 1e-5).all():
+                for key in self:
+                    if i == key[0][0] or i == key[1][0]:
+                        del self[key]
+        self._rspace_trans = new_trans
+
+    def _optimize_rspace_trans(self, polar_dir=None, min_sing_tol=0.1):
+        # done this way to only read wfks from file once then keep operating on them
+        # currently only optimized first wfk with respect to second
+        # i.e. doesn't support more than two lambda states
+        from scipy.optimize import brute
+
+        if polar_dir is None:
+            polar_dir = np.array([0., 0., 1.])
+
+        LOGGER.info("finding real space translation along {}".format(polar_dir))
+
+        # read in initial wavefunctions with no translation
+        self._rspace_trans = np.array([[0., 0., 0.] for ll in self._wfk_files])
+        wfks = [[self._get_pwws_at_state((i, kpt))
+                 for kpt in self.kpoints]
+                for i in range(2)]
+
+        def min_sing_from_trans(trans):
+            # start_time = time.time()
+            # LOGGER.debug("trying trans {}".format(trans))
+            wfk0_trans = [[pww.pww_rspace_translation(trans * polar_dir)
+                           for pww in kpt] for kpt in wfks[0]]
+            # read_time = time.time()
+            # LOGGER.debug("\t translating wfks time {}".format(read_time - start_time))
+            tmp_overlaps = [compute_overlap(wfk0, wfk1, space='gsphere')
+                            for wfk0, wfk1 in zip(wfk0_trans, wfks[1])]
+            # overlap_time = time.time()
+            # LOGGER.debug("\t computed ovlps time {}".format(overlap_time - read_time))
+            s_mins = []
+            for ovl in tmp_overlaps:
+                s = np.linalg.svd(ovl, compute_uv=False).min()
+                s_mins.append(s)
+                # LOGGER.debug(s)
+            # svd_time = time.time()
+            # LOGGER.debug("\t finished svd time {}".format(svd_time - overlap_time))
+            return -1 * min(s_mins)
+        minimize_res = brute(min_sing_from_trans, [[-0.2, 0.2]], Ns=6, full_output=True)
+        LOGGER.debug(minimize_res)
+        if minimize_res[1] < -1 * min_sing_tol:
+            wfc0_trans = minimize_res[0][0] * np.array(polar_dir)
+        else:
+            raise Exception('Unable to align wavefunctions with a translation')
+        LOGGER.info("Will translate first wfk by {}".format(wfc0_trans))
+        self.rspace_trans = np.array([wfc0_trans] + [t for t in self.rspace_trans[1:]])
+
     def _get_pwws_at_state(self, state, spin=0):
         """ given l, kpt wher l is the lambda index
         and kpt is an abipy Kpoint object
@@ -121,32 +187,42 @@ class Overlaps(MutableMapping):
         and shifted by g vectors as needed
         currently returns occupied bands only"""
         l, kpt = state
-        wfk = self._wfk_files[0]
+        wfk = self._wfk_files[l]
         occ_fact = 2 if wfk.nsppol == 1 else 1
+        # LOGGER.debug("getting kpoint {}".format(kpt))
         pwws = [wfk.get_wave(spin, kpt, i)
                 for i in range(wfk.nband)
                 if wfk.ebands.occfacts[0][wfk.kindex(kpt)][i] == occ_fact]
+        # LOGGER.debug("recieved kpoint {}".format(pwws[0].kpoint))
 
-        if (self.rspace_trans[l] > 1e-5).all():
-            for pww in pwws:
-                pww.pww_rspace_translation_inplace(self.rspace_trans[l])
+        if (abs(self.rspace_trans[l]) > 1e-5).any():
+            pwws = [pww.pww_rspace_translation(self.rspace_trans[l]) for pww in pwws]
 
         diff = kpt - pwws[0].kpoint
-        if not (diff.frac_coords < 1e-5).all():
-            # may need to translate by gvec
-            if (np.abs(diff.round() - diff) < 1e-5).all():
-                # translate by gvec
-                for pww in pwws:
-                    pww.pww_translation_inplace(diff.round())
+        if (abs(diff.frac_coords) > 1e-5).any():
+            if (np.abs(diff.frac_coords.round() - diff.frac_coords) < 1e-5).all():
+                LOGGER.debug("translating {} by gvec {} to get {}".format(pwws[0].kpoint,
+                                                                          diff.frac_coords.round(),
+                                                                          kpt))
+                # DO NOT TRANSLATE INPLACE, THEY ALL POINT TO SAME KPT
+                # WILL BE SHIFTED ONCE FOR EACH BAND
+                # maybe we really need an object that stores all pwws at a kpt
+                # for now this works, but likely uses extra memory
+                pwws = [pww.pww_translation(diff.frac_coords.round().astype(int)) for pww in pwws]
+
             else:
                 raise ValueError("Could not get this wavefunction at kpt = {}".format(kpt))
         return pwws
 
     def _compute_overlap(self, pair_of_states):
         state0, state1 = pair_of_states
+        if state0[1] == state1[1]:
+            space = 'gsphere'
+        else:
+            space = 'r'
         return compute_overlap(self._get_pwws_at_state(state0),
                                self._get_pwws_at_state(state1),
-                               space='r')
+                               space=space)
 
     def compute_string_overlaps(self, string):
         """ Compute and store all overlaps along the string (list of Kpoints)
@@ -156,16 +232,27 @@ class Overlaps(MutableMapping):
         string_indicies = range(len(string))
         all_wfcs_on_string = [[self._get_pwws_at_state((l, kpt)) for kpt in string]
                               for l in wfk_file_indicies]
+        # DEBUGGING IndexError
         # first all cross structure overlaps
         for i, j in zip(wfk_file_indicies[:-1], wfk_file_indicies[1:]):
             for k in string_indicies:
-                self[((i, string[k]), (j, string[k]))] = compute_overlap(all_wfcs_on_string[i][k],
-                                                                         all_wfcs_on_string[j][k])
+                if ((i, string[k]), (j, string[k])) not in self.__dict__:
+                    self[((i, string[k]), (j, string[k]))] = compute_overlap(all_wfcs_on_string[i][k],
+                                                                             all_wfcs_on_string[j][k],
+                                                                             space='gsphere')
         # now all cross BZ overlaps
         for i in wfk_file_indicies:
             for k0, k1 in zip(string_indicies[:-1], string_indicies[1:]):
-                self[((i, string[k0]), (i, string[k1]))] = compute_overlap(all_wfcs_on_string[i][k0],
-                                                                           all_wfcs_on_string[i][k1])
+                try:
+                    self[((i, string[k0]), (i, string[k1]))] = compute_overlap(all_wfcs_on_string[i][k0],
+                                                                               all_wfcs_on_string[i][k1],
+                                                                               space='r')
+                except IndexError:
+                    LOGGER.info("wfk{}, {}->{}".format(i, string[k0], string[k1]))
+                    LOGGER.info("ugs: {} and {}".format(all_wfcs_on_string[i][k0][0].ug.shape,
+                                                        all_wfcs_on_string[i][k1][0].ug.shape))
+                    raise IndexError
+                LOGGER.debug("wfk{}, {}->{} finished".format(i, string[k0], string[k1]))
 
     def compute_all_string_overlaps(self, direction):
         """ Compute many overlaps at once
@@ -178,7 +265,6 @@ class Overlaps(MutableMapping):
         for string in strings:
             self.compute_string_overlaps(string)
 
-
 def find_min_singular_value_cross_structs(overlaps, s_vals_file=None):
     """ find the smallest singular value across all structures """
     s_mins = []
@@ -186,7 +272,7 @@ def find_min_singular_value_cross_structs(overlaps, s_vals_file=None):
         s_val_dict = {}
     for kpt in overlaps.kpoints:
         this_u = overlaps[((0, kpt), (1, kpt))]
-        s = np.linalg.svd(this_u, compute_uv=False).min()
+        s = np.linalg.svd(this_u, compute_uv=False)
         if s_vals_file is not None:
             s_val_dict[str(kpt)] = list(s)
         s_mins.append(s.min())
@@ -195,25 +281,6 @@ def find_min_singular_value_cross_structs(overlaps, s_vals_file=None):
             json.dump(s_val_dict, f, indent=3)
     s_mins = np.array(s_mins)
     return s_mins.min(), overlaps.kpoints[s_mins.argmin()]
-
-def find_translation_to_align_w1_with_w2(wfc0, wfc1, polar_dir=None, min_sing_tol=0.1):
-    # TODO: need to optimize so it's not reading from the nc file for every translation
-    if polar_dir is None:
-        polar_dir = [0, 0, 1]
-
-    from scipy.optimize import brute
-
-    def min_sing_from_trans(trans):
-        ovls = Overlaps((wfc0, wfc1), [trans * np.array(polar_dir), 0 * np.array(polar_dir)])
-        return -1 * find_min_singular_value_cross_structs(ovls)[0]
-
-    minimize_res = brute(min_sing_from_trans, [[-0.2, 0.2]], Ns=6, full_output=True)
-    LOGGER.debug(minimize_res)
-    if minimize_res[1] < -1 * min_sing_tol:
-        return minimize_res[0][0] * np.array(polar_dir)
-    else:
-        raise Exception('Unable to align wavefunctions with a translation')
-
 
 if __name__ == '__main__':
     from argparse import ArgumentParser
@@ -245,21 +312,25 @@ if __name__ == '__main__':
     wfc0 = WfkFile(ARGS.wfc_files[0])
     wfc1 = WfkFile(ARGS.wfc_files[1])
 
+    LOGGER.info("Structure 0")
+    LOGGER.info(wfc0.structure)
+    LOGGER.info("Structure 1")
+    LOGGER.info(wfc1.structure)
+
     # we will translate wfc0 to maximize the smallest singular value
     # not done until wfc is actually needed
     if ARGS.translation:
-        wfc0_rspace_trans = ARGS.translation
+        # TODO: should read direction arg and set appropriatly
+        rspace_trans = ARGS.translation * np.array([[0., 0., 1.], [0., 0., 0.]])
     else:
-        LOGGER.info("Finding translation to align wavefunctions")
-        wfc0_rspace_trans = find_translation_to_align_w1_with_w2(wfc0, wfc1, min_sing_tol=ARGS.min_s_tol)
-    LOGGER.info("Will translate {} in real space by {}".format(ARGS.wfc_files[0], wfc0_rspace_trans))
-
-    overlaps = Overlaps((wfc0, wfc1), [wfc0_rspace_trans, 0.])
+        # LOGGER.info("Finding translation to align wavefunctions")
+        # wfc0_rspace_trans = find_translation_to_align_w1_with_w2(wfc0, wfc1, min_sing_tol=ARGS.min_s_tol)
+        rspace_trans = None
+    overlaps = Overlaps((wfc0, wfc1), rspace_trans)
 
     if ARGS.singular_values_file:
         min_s = find_min_singular_value_cross_structs(overlaps, s_vals_file=ARGS.singular_values_file)
 
-    import time
     start_time = time.time()
     overlaps.compute_all_string_overlaps(ARGS.direction)
     after_overlap_time = time.time()
