@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import time
 from collections import MutableSequence
 import logging
 import itertools
@@ -613,6 +614,7 @@ def make_plots(wfc0, wfc1):
 
 
 if __name__ == '__main__':
+    true_start_time = time.time()
     from argparse import ArgumentParser
     arg_parser = ArgumentParser()
     arg_parser.add_argument("wfc_files", nargs=2, help="wavefunction files for each structure")
@@ -666,7 +668,6 @@ if __name__ == '__main__':
     bz_2d_set = sorted(set([(kpt.kcoords[0], kpt.kcoords[1]) for kpt in wfc0]))
 
     string_vals = []
-    import time
     start_time = time.time()
     # for kx, ky in bz_2d_set:
     #     inner_loop_sum = pt_phase_from_strings((kx, ky), wfc0, wfc1)
@@ -684,3 +685,4 @@ if __name__ == '__main__':
     for k, val in zip(bz_2d_set, string_vals):
         logger.info("{}: {}".format(k, val))
     logger.info("average across strings: {}".format(string_sum / len(bz_2d_set)))
+    logger.debug("time info: {} seconds total ".format(time.time() - true_start_time))
