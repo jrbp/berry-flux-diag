@@ -91,10 +91,10 @@ class Overlaps(MutableMapping):
 
     def __getitem__(self, key):
         if self.__dict__.get(key) is None:
-            LOGGER.debug("{} not in Overlaps".format(key))
+            # LOGGER.debug("{} not in Overlaps".format(key))
             if (key[1], key[0]) in self.__dict__:
                 # if switched version present return hermitian conjugate
-                LOGGER.debug("obtaining from Hermitian conj of {}, {}".format(key[1], key[0]))
+                # LOGGER.debug("obtaining from Hermitian conj of {}, {}".format(key[1], key[0]))
                 return self.__dict__[(key[1], key[0])].T.conj()
             else:
                 self.__dict__[key] = self._compute_overlap(key)
@@ -152,23 +152,14 @@ class Overlaps(MutableMapping):
                 for i in range(2)]
 
         def min_sing_from_trans(trans):
-            # start_time = time.time()
-            # LOGGER.debug("trying trans {}".format(trans))
             wfk0_trans = [[pww.pww_rspace_translation(trans * polar_dir)
                            for pww in kpt] for kpt in wfks[0]]
-            # read_time = time.time()
-            # LOGGER.debug("\t translating wfks time {}".format(read_time - start_time))
             tmp_overlaps = [compute_overlap(wfk0, wfk1, space='gsphere')
                             for wfk0, wfk1 in zip(wfk0_trans, wfks[1])]
-            # overlap_time = time.time()
-            # LOGGER.debug("\t computed ovlps time {}".format(overlap_time - read_time))
             s_mins = []
             for ovl in tmp_overlaps:
                 s = np.linalg.svd(ovl, compute_uv=False).min()
                 s_mins.append(s)
-                # LOGGER.debug(s)
-            # svd_time = time.time()
-            # LOGGER.debug("\t finished svd time {}".format(svd_time - overlap_time))
             return -1 * min(s_mins)
         minimize_res = brute(min_sing_from_trans, [[-0.2, 0.2]], Ns=6, full_output=True)
         LOGGER.debug(minimize_res)
@@ -189,11 +180,9 @@ class Overlaps(MutableMapping):
         l, kpt = state
         wfk = self._wfk_files[l]
         occ_fact = 2 if wfk.nsppol == 1 else 1
-        # LOGGER.debug("getting kpoint {}".format(kpt))
         pwws = [wfk.get_wave(spin, kpt, i)
                 for i in range(wfk.nband)
                 if wfk.ebands.occfacts[0][wfk.kindex(kpt)][i] == occ_fact]
-        # LOGGER.debug("recieved kpoint {}".format(pwws[0].kpoint))
 
         if (abs(self.rspace_trans[l]) > 1e-5).any():
             pwws = [pww.pww_rspace_translation(self.rspace_trans[l]) for pww in pwws]
@@ -232,7 +221,6 @@ class Overlaps(MutableMapping):
         string_indicies = range(len(string))
         all_wfcs_on_string = [[self._get_pwws_at_state((l, kpt)) for kpt in string]
                               for l in wfk_file_indicies]
-        # DEBUGGING IndexError
         # first all cross structure overlaps
         for i, j in zip(wfk_file_indicies[:-1], wfk_file_indicies[1:]):
             for k in string_indicies:
@@ -243,15 +231,9 @@ class Overlaps(MutableMapping):
         # now all cross BZ overlaps
         for i in wfk_file_indicies:
             for k0, k1 in zip(string_indicies[:-1], string_indicies[1:]):
-                try:
-                    self[((i, string[k0]), (i, string[k1]))] = compute_overlap(all_wfcs_on_string[i][k0],
-                                                                               all_wfcs_on_string[i][k1],
-                                                                               space='r')
-                except IndexError:
-                    LOGGER.info("wfk{}, {}->{}".format(i, string[k0], string[k1]))
-                    LOGGER.info("ugs: {} and {}".format(all_wfcs_on_string[i][k0][0].ug.shape,
-                                                        all_wfcs_on_string[i][k1][0].ug.shape))
-                    raise IndexError
+                self[((i, string[k0]), (i, string[k1]))] = compute_overlap(all_wfcs_on_string[i][k0],
+                                                                            all_wfcs_on_string[i][k1],
+                                                                            space='r')
                 LOGGER.debug("wfk{}, {}->{} finished".format(i, string[k0], string[k1]))
 
     def compute_all_string_overlaps(self, direction):
@@ -283,6 +265,7 @@ def find_min_singular_value_cross_structs(overlaps, s_vals_file=None):
     return s_mins.min(), overlaps.kpoints[s_mins.argmin()]
 
 if __name__ == '__main__':
+    true_start_time = time.time()
     from argparse import ArgumentParser
     ARG_PARSER = ArgumentParser()
     ARG_PARSER.add_argument("wfc_files", nargs=2,
@@ -346,14 +329,11 @@ if __name__ == '__main__':
                      ((0, kpt1), (0, kpt0)),]
             curly_U = np.identity(len(overlaps[loops[0]]))
             for states in loops:
+                LOGGER.debug("states {} -> {}".format(states[0], states[1]))
                 M = overlaps[states]
                 u, s, v = np.linalg.svd(M)
                 smallest_sing_val = min(s)
-                LOGGER.debug(("finding curly M: \n"
-                              " state1: {} \n"
-                              " state2: {} \n"
-                              " min singular value: {}").format(
-                                  states[0], states[1], smallest_sing_val))
+                LOGGER.debug(("min singular value: {}").format(smallest_sing_val))
                 if smallest_sing_val < 0.1:
                     LOGGER.warning("MIN SINGULAR VALUE OF {} FOUND!".format(
                         smallest_sing_val))
@@ -364,13 +344,15 @@ if __name__ == '__main__':
                 #LOGGER.debug(curly_M)
                 curly_U = np.dot(curly_U, curly_M)
             wlevs = np.log(np.linalg.eigvals(curly_U)).imag
+            LOGGER.debug("loop eigenvalues:\n{}".format(wlevs / np.pi))
             inner_loop_sum += sum(wlevs) / np.pi
         string_phases.append(inner_loop_sum)
     string_sum = sum(string_phases)
-    LOGGER.debug("time info: {} seconds".format(time.time() - after_overlap_time))
+    LOGGER.debug("time info: {} seconds to do all svds".format(time.time() - after_overlap_time))
 
     for string, val in zip(strings, string_phases):
         LOGGER.info("{}, {}: {}".format(string[0].frac_coords[0], string[0].frac_coords[1], val))
     LOGGER.info("average across strings: {}".format(string_sum / len(strings)))
     wfc0.close()
     wfc1.close()
+    LOGGER.debug("time info: {} seconds total".format(time.time() - true_start_time))
