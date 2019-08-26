@@ -232,8 +232,8 @@ class Overlaps(MutableMapping):
         for i in wfk_file_indicies:
             for k0, k1 in zip(string_indicies[:-1], string_indicies[1:]):
                 self[((i, string[k0]), (i, string[k1]))] = compute_overlap(all_wfcs_on_string[i][k0],
-                                                                            all_wfcs_on_string[i][k1],
-                                                                            space='r')
+                                                                           all_wfcs_on_string[i][k1],
+                                                                           space='r')
                 LOGGER.debug("wfk{}, {}->{} finished".format(i, string[k0], string[k1]))
 
     def compute_all_string_overlaps(self, direction):
@@ -338,10 +338,6 @@ if __name__ == '__main__':
                     LOGGER.warning("MIN SINGULAR VALUE OF {} FOUND!".format(
                         smallest_sing_val))
                 curly_M = np.dot(u, v)
-                #LOGGER.debug('\n')
-                #LOGGER.debug(M)
-                #LOGGER.debug('\n')
-                #LOGGER.debug(curly_M)
                 curly_U = np.dot(curly_U, curly_M)
             wlevs = np.log(np.linalg.eigvals(curly_U)).imag
             LOGGER.debug("loop eigenvalues:\n{}".format(wlevs / np.pi))
