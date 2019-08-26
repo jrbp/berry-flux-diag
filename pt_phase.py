@@ -247,6 +247,25 @@ class Overlaps(MutableMapping):
         for string in strings:
             self.compute_string_overlaps(string)
 
+    def get_unitary_along_path(self, path):
+        """ Obtain a unitary matrix representing the parallel transport
+        evolution of states along a path"""
+        path_pairs = zip(path[:-1], path[1:])
+        curly_U = np.identity(len(overlaps[(path[0], path[1])]))
+        for states in path_pairs:
+            LOGGER.debug("states {} -> {}".format(states[0], states[1]))
+            M = overlaps[states]
+            u, s, v = np.linalg.svd(M)
+            smallest_sing_val = min(s)
+            LOGGER.debug(("min singular value: {}").format(smallest_sing_val))
+            if smallest_sing_val < 0.1:
+                LOGGER.warning("MIN SINGULAR VALUE OF {} FOUND!".format(
+                    smallest_sing_val))
+            curly_M = np.dot(u, v)
+            curly_U = np.dot(curly_U, curly_M)
+        return curly_U
+
+
 def find_min_singular_value_cross_structs(overlaps, s_vals_file=None):
     """ find the smallest singular value across all structures """
     s_mins = []
@@ -323,22 +342,9 @@ if __name__ == '__main__':
     for string in strings:
         inner_loop_sum = 0.
         for kpt0, kpt1 in zip(string[:-1], string[1:]):
-            loops = [((0, kpt0), (1, kpt0)),
-                     ((1, kpt0), (1, kpt1)),
-                     ((1, kpt1), (0, kpt1)),
-                     ((0, kpt1), (0, kpt0)),]
-            curly_U = np.identity(len(overlaps[loops[0]]))
-            for states in loops:
-                LOGGER.debug("states {} -> {}".format(states[0], states[1]))
-                M = overlaps[states]
-                u, s, v = np.linalg.svd(M)
-                smallest_sing_val = min(s)
-                LOGGER.debug(("min singular value: {}").format(smallest_sing_val))
-                if smallest_sing_val < 0.1:
-                    LOGGER.warning("MIN SINGULAR VALUE OF {} FOUND!".format(
-                        smallest_sing_val))
-                curly_M = np.dot(u, v)
-                curly_U = np.dot(curly_U, curly_M)
+            loop_path = [(0, kpt0), (1, kpt0), (1, kpt1),
+                         (0, kpt1), (0, kpt0)]
+            curly_U = overlaps.get_unitary_along_path(loop_path)
             wlevs = np.log(np.linalg.eigvals(curly_U)).imag
             LOGGER.debug("loop eigenvalues:\n{}".format(wlevs / np.pi))
             inner_loop_sum += sum(wlevs) / np.pi
