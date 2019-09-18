@@ -403,8 +403,8 @@ if __name__ == '__main__':
                          (0, kpt1), (0, kpt0)]
             curly_U = overlaps.get_unitary_along_path(loop_path)
             wlevs = np.log(np.linalg.eigvals(curly_U)).imag
-            LOGGER.debug("loop eigenvalues:\n{}".format(wlevs / np.pi))
-            inner_loop_sum += sum(wlevs) / np.pi
+            LOGGER.debug("loop eigenvalues:\n{}".format(wlevs / (2 * np.pi)))
+            inner_loop_sum += sum(wlevs) / (2 * np.pi)
         string_phases.append(inner_loop_sum)
     string_sum = sum(string_phases)
     LOGGER.debug("time info: {} seconds to do all svds".format(time.time() - after_overlap_time))
