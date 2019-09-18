@@ -259,10 +259,10 @@ class Overlaps(MutableMapping):
         """ Obtain a unitary matrix representing the parallel transport
         evolution of states along a path"""
         path_pairs = zip(path[:-1], path[1:])
-        curly_U = np.identity(len(overlaps[(path[0], path[1])]))
+        curly_U = np.identity(len(self[(path[0], path[1])]))
         for states in path_pairs:
             LOGGER.debug("states {} -> {}".format(states[0], states[1]))
-            M = overlaps[states]
+            M = self[states]
             u, s, v = np.linalg.svd(M)
             smallest_sing_val = min(s)
             LOGGER.debug(("min singular value: {}").format(smallest_sing_val))
