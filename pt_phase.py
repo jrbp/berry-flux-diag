@@ -83,8 +83,10 @@ class Overlaps(MutableMapping):
         self._wfk_files = wfk_files #TODO: check that they have same Kpoints, maybe same lattice vectors
         if rspace_translations is not None:
             self._rspace_trans = np.array(rspace_translations)
-        else:
+        elif len(wfk_files) > 1:
             self._optimize_rspace_trans()
+        else:
+            self._rspace_trans = np.array([[0., 0., 0.] for w in wfk_files])
 
         # below option to accept paths doesn't close files
         # for wfk_file in wfk_files:
