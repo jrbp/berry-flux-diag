@@ -2,13 +2,19 @@
 # import os
 import time
 import logging
-# import itertools
+import itertools
 import json
 # from multiprocessing import Pool
 from collections.abc import MutableMapping
 import numpy as np
 from abipy.waves import WfkFile
 from abipy.core.kpoints import Kpoint
+from pymatgen.optimization.linear_assignment import LinearAssignment
+from pymatgen.util.coord_cython import pbc_shortest_vectors
+from pymatgen.io.abinit.pseudos import PseudoTable
+
+ECHARGE = 1.60217733 * 10**-19
+
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -283,6 +289,54 @@ def find_min_singular_value_cross_structs(overlaps, s_vals_file=None):
     s_mins = np.array(s_mins)
     return s_mins.min(), overlaps.kpoints[s_mins.argmin()]
 
+def get_mask(struct2, struct1):
+    mask = np.zeros((len(struct2), len(struct1)), dtype=np.bool)
+
+    inner = []
+    for sp2, i in itertools.groupby(enumerate(struct2.species_and_occu),
+                                    key=lambda x: x[1]):
+        i = list(i)
+        inner.append((sp2, slice(i[0][0], i[-1][0]+1)))
+
+    for sp1, j in itertools.groupby(enumerate(struct1.species_and_occu),
+                                    key=lambda x: x[1]):
+        j = list(j)
+        j = slice(j[0][0], j[-1][0]+1)
+        for sp2, i in inner:
+            mask[i, j,] = str(sp1) != str(sp2)
+    return mask
+
+def get_ionic_pol_change(struct2, struct1, psp_table, extra_trans=None):
+    """should already be translated"""
+    if extra_trans is None:
+        extra_trans = np.array([0., 0., 0.])
+    else:
+        # convert extra_trans to cartesian
+        extra_trans = np.array(extra_trans) * np.array(struct2.lattice.abc)
+    mask = get_mask(struct2, struct1)
+    vecs, d_2 = pbc_shortest_vectors(struct2.lattice, struct2.frac_coords, struct1.frac_coords,
+                                     mask, return_d2=True, lll_frac_tol=[0.4, 0.4, 0.4])
+    # print(vecs)
+    lin = LinearAssignment(d_2)
+    s = lin.solution
+    species = [struct1[i].species_string for i in s]
+    short_vecs = vecs[np.arange(len(s)), s]
+    #print(short_vecs)
+    pol_change = np.array([0., 0., 0.])
+    for v, sp in zip(short_vecs, species):
+        pol_change += (v - extra_trans) * psp_table.pseudo_with_symbol(sp).Z_val
+    return (ECHARGE * 10**20 ) * pol_change / struct2.lattice.volume
+
+def get_spont_pol(struct2, struct1, psp_table, elec_change, extra_trans):
+    # still hard coded for c direction polarization
+    elec_contrib = (ECHARGE * 10 ** 20) * np.array(elec_change) * struct2.lattice.c / struct2.lattice.volume
+    ion_contrib = get_ionic_pol_change(struct2, struct1, psp_table, extra_trans)
+    print(elec_change)
+    print(ion_contrib)
+    print(elec_contrib)
+    return (elec_contrib + ion_contrib) / 2
+
+
 if __name__ == '__main__':
     true_start_time = time.time()
     from argparse import ArgumentParser
@@ -334,6 +388,7 @@ if __name__ == '__main__':
         min_s = find_min_singular_value_cross_structs(overlaps, s_vals_file=ARGS.singular_values_file)
 
     start_time = time.time()
+    # Computing Electronic Part
     overlaps.compute_all_string_overlaps(ARGS.direction)
     after_overlap_time = time.time()
     LOGGER.debug("time info: {} seconds to compute all overlaps".format(after_overlap_time - start_time))
@@ -355,6 +410,16 @@ if __name__ == '__main__':
     for string, val in zip(strings, string_phases):
         LOGGER.info("{}, {}: {}".format(string[0].frac_coords[0], string[0].frac_coords[1], val))
     LOGGER.info("average across strings: {}".format(string_sum / len(strings)))
+    # Electronic part completed
+
+    # Computing Ionic Part
+    # NEEDS TESTING
+    local_pspdir = '/home/john/Documents/research/pseudo/oncvpsp/sr_0.4/pbe'
+    onc_psp_table = PseudoTable.from_dir(local_pspdir, exts=('psp8',))
+    occ_fact = 2 if wfc0.nsppol == 1 else 1
+    final_pol = get_spont_pol(wfc0.structure, wfc1.structure, onc_psp_table,
+                              [0., 0., occ_fact * string_sum / len(strings)], overlaps.rspace_trans[0])
+    LOGGER.info("Final polarization = {} C/m^2".format(final_pol))
     wfc0.close()
     wfc1.close()
     LOGGER.debug("time info: {} seconds total".format(time.time() - true_start_time))
