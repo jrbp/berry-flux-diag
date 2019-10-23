@@ -310,6 +310,7 @@ def get_mask(struct2, struct1):
 
 def get_ionic_pol_change(struct2, struct1, psp_table, extra_trans=None):
     """should already be translated"""
+    LOGGER.info("Finding ionic change in polarization")
     if extra_trans is None:
         extra_trans = np.array([0., 0., 0.])
     else:
@@ -318,24 +319,25 @@ def get_ionic_pol_change(struct2, struct1, psp_table, extra_trans=None):
     mask = get_mask(struct2, struct1)
     vecs, d_2 = pbc_shortest_vectors(struct2.lattice, struct2.frac_coords, struct1.frac_coords,
                                      mask, return_d2=True, lll_frac_tol=[0.4, 0.4, 0.4])
-    # print(vecs)
     lin = LinearAssignment(d_2)
     s = lin.solution
     species = [struct1[i].species_string for i in s]
     short_vecs = vecs[np.arange(len(s)), s]
-    #print(short_vecs)
+    LOGGER.debug("Displacements:")
+    LOGGER.debug(short_vecs)
     pol_change = np.array([0., 0., 0.])
     for v, sp in zip(short_vecs, species):
         pol_change += (v - extra_trans) * psp_table.pseudo_with_symbol(sp).Z_val
+        LOGGER.debug("{}\t{}\t{}".format(sp, psp_table.pseudo_with_symbol(sp).Z_val, v))
     return (ECHARGE * 10**20 ) * pol_change / struct2.lattice.volume
 
 def get_spont_pol(struct2, struct1, psp_table, elec_change, extra_trans):
     # still hard coded for c direction polarization
     elec_contrib = (ECHARGE * 10 ** 20) * np.array(elec_change) * struct2.lattice.c / struct2.lattice.volume
     ion_contrib = get_ionic_pol_change(struct2, struct1, psp_table, extra_trans)
-    print(elec_change)
-    print(ion_contrib)
-    print(elec_contrib)
+    LOGGER.info("Electronic phase change: {}".format(elec_change))
+    LOGGER.info("Electronic polarization change: {}".format(elec_contrib))
+    LOGGER.info("Ionic polarization change: {}".format(ion_contrib))
     return (elec_contrib + ion_contrib) / 2
 
 
