@@ -13,6 +13,8 @@
 Compute changes in polarization between closely related structures without
 constructing a path of intermediate states.
 
+Currently the code is very much in an alpha state and not so user friendly.
+
 This page will be updated with detailed configuration and usage instructions soon.
 
 ** Maintainers
