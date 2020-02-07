@@ -1,0 +1,44 @@
+#+TITLE:
+#+DATE:    February 7, 2020
+#+STARTUP: inlineimages nofold
+
+* Table of Contents :TOC_3:noexport:
+- [[#description][Description]]
+  - [[#maintainers][Maintainers]]
+- [[#prerequisites][Prerequisites]]
+- [[#usage][Usage]]
+
+* Description
+
+Compute changes in polarization between closely related structures without
+constructing a path of intermediate states.
+
+This page will be updated with detailed configuration and usage instructions soon.
+
+** Maintainers
++ @jrbp (Author)
+
+* Prerequisites
+Currently only compatible with Abinit wavefunctions in a netcdf format.
+
+Both pymatgen and abipy must be installed to run the script.
+
+
+# * Features
+# An in-depth list of features, how to use them, and their dependencies.
+
+* Usage
+
+Running:
+#+begin_sh
+python b_flux_d.py -h
+#+end_sh
+will describe arguments that can be passed to the script.
+
+This page will be updated with examples both on using the code from the command
+line and as a python library.
+
+
+
+# * Troubleshooting
+# Common issues and their solution, or places to look for help.
