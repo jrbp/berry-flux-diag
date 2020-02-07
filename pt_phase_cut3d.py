@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+"""
+Older slower version which does not use netcdf or abipy
+"""
 import time
 from collections import MutableSequence
 import logging
