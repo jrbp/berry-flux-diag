@@ -9,6 +9,7 @@ from collections.abc import MutableMapping
 import numpy as np
 from abipy.waves import WfkFile
 from abipy.core.kpoints import Kpoint
+import pymatgen as pmg
 from pymatgen.optimization.linear_assignment import LinearAssignment
 from pymatgen.util.coord_cython import pbc_shortest_vectors
 from pymatgen.io.abinit.pseudos import PseudoTable
@@ -80,7 +81,16 @@ def get_strings(kpoints, direction):
 class Overlaps(MutableMapping):
     def __init__(self, wfk_files, rspace_translations=None):
         self.__dict__ = {} #TODO: possibly fill with keys of neighboring points with values None
-        self._wfk_files = wfk_files #TODO: check that they have same Kpoints, maybe same lattice vectors
+        # self._wfk_files = wfk_files #TODO: check that they have same Kpoints, maybe same lattice vectors
+        # below option to accept paths doesn't close files
+        self._wfk_files = []
+        for wfk_file in wfk_files:
+            if isinstance(wfk_file, str):
+                self._wfk_files.append(WfkFile(wfk_file))
+            elif isinstance(wfk_file, WfkFile):
+                self._wfk_files.append(wfk_file)
+            else:
+                raise TypeError('WFK files must be strings of nc file path or WfkFile objects')
         if rspace_translations is not None:
             self._rspace_trans = np.array(rspace_translations)
         elif len(wfk_files) > 1:
@@ -88,14 +98,6 @@ class Overlaps(MutableMapping):
         else:
             self._rspace_trans = np.array([[0., 0., 0.] for w in wfk_files])
 
-        # below option to accept paths doesn't close files
-        # for wfk_file in wfk_files:
-        #     if type(wfk_file) is str:
-        #         self._wfk_files.append(WfkFile(wfk_file))
-        #     elif type(wfk_file) is WfkFile:
-        #         self._wfk_files = wfk_file
-        #     else:
-        #         raise TypeError('WFK files must be strings of nc file path or ')
 
     def __getitem__(self, key):
         if self.__dict__.get(key) is None:
@@ -273,6 +275,56 @@ class Overlaps(MutableMapping):
             curly_U = np.dot(curly_U, curly_M)
         return curly_U
 
+    def as_dict(self):
+        "for json serialzation"
+        json_dict = {}
+        for k, v in self.items():
+            this_key = None
+            this_val = None
+            if k == '_wfk_files' and isinstance(v[0], WfkFile):
+                this_val = [wfk.filepath for wfk in v]
+            if isinstance(v, np.ndarray):
+                this_val = {'real': v.real.tolist(),
+                            'imag': v.imag.tolist()}
+            if not isinstance(k, str):
+                this_val = {'wfk0': k[0][0],
+                            'kpt0': {'frac_coords': k[0][1].frac_coords.tolist(),
+                                     'reciprocal_lattice': k[0][1].lattice.as_dict(),
+                                     'weight':k[0][1].weight,
+                                     'name':k[0][1].name},
+                            'wfk1': k[1][0],
+                            'kpt1': {'frac_coords': k[1][1].frac_coords.tolist(),
+                                     'reciprocal_lattice': k[1][1].lattice.as_dict(),
+                                     'weight':k[1][1].weight,
+                                     'name':k[1][1].name},
+                            'val': this_val}
+
+                this_key = str(k)
+            if this_key is None:
+                this_key = k
+            if this_val is None:
+                this_val = v
+            json_dict[this_key] = this_val
+        return json_dict
+
+    @classmethod
+    def from_dict(cls, d):
+        ovl_from_dict = cls(d['_wfk_files'], rspace_translations=d['_rspace_trans']['real'])
+        for k, v in d.items():
+            if k == '_wfk_files' or k == '_rspace_trans':
+                continue
+            kpt0 = Kpoint(v['kpt0']['frac_coords'],
+                          pmg.Lattice.from_dict(v['kpt0']['reciprocal_lattice']),
+                          weight=v['kpt0']['weight'],
+                          name=v['kpt0']['name'])
+            kpt1 = Kpoint(v['kpt1']['frac_coords'],
+                          pmg.Lattice.from_dict(v['kpt1']['reciprocal_lattice']),
+                          weight=v['kpt1']['weight'],
+                          name=v['kpt1']['name'])
+            ovl_from_dict[((v['wfk0'],
+                            kpt0), (v['wfk1'], kpt1))] = np.array(v['val']['real'], dtype=complex) + 1.j * np.array(v['val']['imag'], dtype=complex)
+        return ovl_from_dict
+
 
 def find_min_singular_value_cross_structs(overlaps, s_vals_file=None):
     """ find the smallest singular value across all structures """
@@ -353,6 +405,8 @@ if __name__ == '__main__':
                             help="number of cpus to parallelize over")
     ARG_PARSER.add_argument("-sf", "--singular_values_file", required=False,
                             help="file name to write singular values (as json)")
+    ARG_PARSER.add_argument("-of", "--overlaps_file", required=False,
+                            help="file name to write overlap object (as json)")
     ARG_PARSER.add_argument("-d", "--direction", required=False,
                             help="direction to compute change in polarization", default='z')
     ARG_PARSER.add_argument("-t", "--translation", required=False, default=None, type=float,
@@ -394,6 +448,9 @@ if __name__ == '__main__':
     start_time = time.time()
     # Computing Electronic Part
     overlaps.compute_all_string_overlaps(ARGS.direction)
+    if ARGS.overlaps_file:
+        with open(ARGS.overlaps_file, 'w') as f:
+            json.dump(overlaps.as_dict(), f, indent=2)
     after_overlap_time = time.time()
     LOGGER.debug("time info: {} seconds to compute all overlaps".format(after_overlap_time - start_time))
     strings = get_strings(wfc0.kpoints, ARGS.direction)
