@@ -13,6 +13,9 @@
 Compute changes in polarization between closely related structures without
 constructing a path of intermediate states.
 
+See the paper at [[https://arxiv.org/abs/2002.02995][arXiv:2002.02995]] [cond-mat.mtrl-sci]
+
+
 Currently the code is very much in an alpha state and not so user friendly.
 
 This page will be updated with detailed configuration and usage instructions soon.
