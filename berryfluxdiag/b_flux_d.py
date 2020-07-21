@@ -479,7 +479,8 @@ if __name__ == '__main__':
     # Computing Ionic Part
     # NEEDS TESTING
     # local_pspdir = '/home/john/Documents/research/pseudo/oncvpsp/sr_0.4/pbe'
-    local_pspdir = '/home/john/Documents/research/pseudo/oncvpsp/sr_0.4/pbesol'
+    #local_pspdir = '/home/john/Documents/research/pseudo/oncvpsp/sr_0.4/pbesol'
+    local_pspdir = './'
     onc_psp_table = PseudoTable.from_dir(local_pspdir, exts=('psp8',))
     occ_fact = 2 if wfc0.nsppol == 1 else 1
     final_pol = get_spont_pol(wfc0.structure, wfc1.structure, onc_psp_table,
