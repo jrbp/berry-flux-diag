@@ -14,6 +14,9 @@ from pymatgen.optimization.linear_assignment import LinearAssignment
 from pymatgen.util.coord_cython import pbc_shortest_vectors
 from pymatgen.io.abinit.pseudos import PseudoTable
 
+from berryfluxdiag.patches import PATCH_PWWaveFunction
+PATCH_PWWaveFunction()
+
 ECHARGE = 1.60217733 * 10**-19
 
 
