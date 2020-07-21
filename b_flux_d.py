@@ -45,11 +45,11 @@ def direction_to_vals(direction):
     elif direction == 'x':
         comps = (1, 2)
         dir_comp = 0
-        gvec = [0, 1, 0]
+        gvec = [1, 0, 0]
     elif direction == 'y':
         comps = (0, 2)
         dir_comp = 1
-        gvec = [1, 0, 0]
+        gvec = [0, 1, 0]
     else:
         raise ValueError('Direction must be x, y, or z')
     return comps, dir_comp, gvec
