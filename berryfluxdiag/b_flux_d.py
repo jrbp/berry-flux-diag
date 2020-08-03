@@ -192,7 +192,7 @@ class Overlaps(MutableMapping):
         currently returns occupied bands only"""
         l, kpt = state
         wfk = self._wfk_files[l]
-        occ_fact = 2 if wfk.nsppol == 1 else 1
+        occ_fact = 2 if (wfk.nspden == 1 and wfk.nspinor == 1) else 1 # TODO: check that this is right for all combos of nspden, nspinor, and nsppol
         pwws = [wfk.get_wave(spin, kpt, i)
                 for i in range(wfk.nband)
                 if wfk.ebands.occfacts[0][wfk.kindex(kpt)][i] == occ_fact]
