@@ -35,12 +35,14 @@ def compute_overlap(waves0, waves1, space='r'):
             for j, wv1 in enumerate(ug1_mesh):
                 overlap[i, j] = np.vdot(wv0, wv1)
     else:
-        for i, wv0 in enumerate(waves0): # possible to speedup with usage of np.tensordot?
+        for i, wv0 in enumerate(waves0):
+            LOGGER.debug('\t {}/{}'.format(i, len(waves0)))
             for j, wv1 in enumerate(waves1):
                 overlap[i, j] = wv0.braket(wv1, space=space)
     return overlap
 
 def direction_to_vals(direction):
+    # TODO consider changing x,y,z --> a,b,c
     if direction == 'z':
         comps = (0, 1)
         dir_comp = 2
@@ -82,7 +84,7 @@ def get_strings(kpoints, direction):
 
 
 class Overlaps(MutableMapping):
-    def __init__(self, wfk_files, rspace_translations=None):
+    def __init__(self, wfk_files, rspace_translations=None, polar_dir=None):
         self.__dict__ = {} #TODO: possibly fill with keys of neighboring points with values None
         # self._wfk_files = wfk_files #TODO: check that they have same Kpoints, maybe same lattice vectors
         # below option to accept paths doesn't close files
@@ -97,7 +99,7 @@ class Overlaps(MutableMapping):
         if rspace_translations is not None:
             self._rspace_trans = np.array(rspace_translations)
         elif len(wfk_files) > 1:
-            self._optimize_rspace_trans()
+            self._optimize_rspace_trans(polar_dir=polar_dir)
         else:
             self._rspace_trans = np.array([[0., 0., 0.] for w in wfk_files])
 
@@ -211,6 +213,7 @@ class Overlaps(MutableMapping):
                 # maybe we really need an object that stores all pwws at a kpt
                 # for now this works, but likely uses extra memory
                 pwws = [pww.pww_translation(diff.frac_coords.round().astype(int)) for pww in pwws]
+                LOGGER.debug("all translated")
 
             else:
                 raise ValueError("Could not get this wavefunction at kpt = {}".format(kpt))
@@ -234,6 +237,7 @@ class Overlaps(MutableMapping):
         string_indicies = range(len(string))
         all_wfcs_on_string = [[self._get_pwws_at_state((l, kpt)) for kpt in string]
                               for l in wfk_file_indicies]
+        LOGGER.debug('string wfcs loaded')
         # first all cross structure overlaps
         for i, j in zip(wfk_file_indicies[:-1], wfk_file_indicies[1:]):
             for k in string_indicies:
@@ -241,9 +245,11 @@ class Overlaps(MutableMapping):
                     self[((i, string[k]), (j, string[k]))] = compute_overlap(all_wfcs_on_string[i][k],
                                                                              all_wfcs_on_string[j][k],
                                                                              space='gsphere')
+        LOGGER.debug('cross structure overlaps complete')
         # now all cross BZ overlaps
         for i in wfk_file_indicies:
             for k0, k1 in zip(string_indicies[:-1], string_indicies[1:]):
+                LOGGER.debug("wfk{}, {}->{} starting".format(i, string[k0], string[k1]))
                 self[((i, string[k0]), (i, string[k1]))] = compute_overlap(all_wfcs_on_string[i][k0],
                                                                            all_wfcs_on_string[i][k1],
                                                                            space='r')
@@ -434,16 +440,20 @@ if __name__ == '__main__':
     LOGGER.info("Structure 1")
     LOGGER.info(wfc1.structure)
 
+    if ARGS.direction:
+        polar_dir = np.array(direction_to_vals(ARGS.direction)[2])
+    else:
+        polar_dir = np.array([0., 0., 1])
+
     # we will translate wfc0 to maximize the smallest singular value
     # not done until wfc is actually needed
     if ARGS.translation:
-        # TODO: should read direction arg and set appropriatly
-        rspace_trans = ARGS.translation * np.array([[0., 0., 1.], [0., 0., 0.]])
+        rspace_trans = ARGS.translation * np.array([polar_dir, [0., 0., 0.]])
     else:
         # LOGGER.info("Finding translation to align wavefunctions")
         # wfc0_rspace_trans = find_translation_to_align_w1_with_w2(wfc0, wfc1, min_sing_tol=ARGS.min_s_tol)
         rspace_trans = None
-    overlaps = Overlaps((wfc0, wfc1), rspace_trans)
+    overlaps = Overlaps((wfc0, wfc1), rspace_trans, polar_dir=polar_dir)
 
     if ARGS.singular_values_file:
         min_s = find_min_singular_value_cross_structs(overlaps, s_vals_file=ARGS.singular_values_file)
@@ -480,7 +490,7 @@ if __name__ == '__main__':
     # NEEDS TESTING
     # local_pspdir = '/home/john/Documents/research/pseudo/oncvpsp/sr_0.4/pbe'
     #local_pspdir = '/home/john/Documents/research/pseudo/oncvpsp/sr_0.4/pbesol'
-    local_pspdir = './'
+    local_pspdir = '/mnt/home/jbonini/psps/oncvpsp/nc-sr-03_lda_standard'
     onc_psp_table = PseudoTable.from_dir(local_pspdir, exts=('psp8',))
     occ_fact = 2 if wfc0.nsppol == 1 else 1
     final_pol = get_spont_pol(wfc0.structure, wfc1.structure, onc_psp_table,
