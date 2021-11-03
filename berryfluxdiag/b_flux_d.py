@@ -447,7 +447,7 @@ if __name__ == '__main__':
 
     # we will translate wfc0 to maximize the smallest singular value
     # not done until wfc is actually needed
-    if ARGS.translation:
+    if ARGS.translation is not None:
         rspace_trans = ARGS.translation * np.array([polar_dir, [0., 0., 0.]])
     else:
         # LOGGER.info("Finding translation to align wavefunctions")
