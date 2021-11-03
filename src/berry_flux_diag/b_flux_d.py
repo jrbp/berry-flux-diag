@@ -9,12 +9,12 @@ from collections.abc import MutableMapping
 import numpy as np
 from abipy.waves import WfkFile
 from abipy.core.kpoints import Kpoint
-import pymatgen as pmg
+import pymatgen.core as pmg
 from pymatgen.optimization.linear_assignment import LinearAssignment
 from pymatgen.util.coord_cython import pbc_shortest_vectors
 from pymatgen.io.abinit.pseudos import PseudoTable
 
-from berryfluxdiag.patches import PATCH_PWWaveFunction
+from berry_flux_diag.patches import PATCH_PWWaveFunction
 PATCH_PWWaveFunction()
 
 ECHARGE = 1.60217733 * 10**-19
