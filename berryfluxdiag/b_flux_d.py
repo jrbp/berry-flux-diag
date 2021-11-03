@@ -277,7 +277,7 @@ class Overlaps(MutableMapping):
             u, s, v = np.linalg.svd(M)
             smallest_sing_val = min(s)
             LOGGER.debug(("min singular value: {}").format(smallest_sing_val))
-            if smallest_sing_val < 0.1:
+            if smallest_sing_val < 0.2:
                 LOGGER.warning("MIN SINGULAR VALUE OF {} FOUND!".format(
                     smallest_sing_val))
             curly_M = np.dot(u, v)
