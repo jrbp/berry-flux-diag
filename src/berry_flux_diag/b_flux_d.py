@@ -32,7 +32,7 @@ def compute_overlap(waves0, waves1, space='r'):
         # put all on mesh once instead of using braket where it happens for each element
         ug0_mesh = np.array([wv.gsphere.tofftmesh(mesh0, wv.ug) for wv in waves0], dtype=complex)
         ug1_mesh = np.array([wv.gsphere.tofftmesh(mesh0, wv.ug) for wv in waves1], dtype=complex)
-        overlap = np.tensordot(ug0_mesh, ug1_mesh, axes=(1,1))
+        overlap = np.einsum('ij,kj', ug0_mesh.conj(), ug1_mesh)
         #for i, wv0 in enumerate(ug0_mesh): # possible to speedup with usage of np.tensordot?
         #    for j, wv1 in enumerate(ug1_mesh):
         #        overlap[i, j] = np.vdot(wv0, wv1)
